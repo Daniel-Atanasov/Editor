@@ -1,0 +1,55 @@
+﻿# CMakeList.txt : CMake project for Editor, include source and define
+# project specific logic here.
+#
+cmake_minimum_required (VERSION 3.15)
+cmake_policy(SET CMP0091 NEW)
+
+if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+	set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+		CACHE STRING "")
+		message(" [INFO] VCPKG CMAKE_TOOLCHAIN_FILE = ${CMAKE_TOOLCHAIN_FILE}"
+	)
+endif()
+
+project(Editor)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /CGTHREADS:8 /INCREMENTAL:NO")
+
+set(CMAKE_CXX_FLAGS_DEBUG "/JMC /Od /Z7 /MDd")
+
+set(CMAKE_CXX_FLAGS_RELEASE "/O2 /GS- /guard:cf /D NDEBUG /JMC- /GL /Ob3 /MD /cgthreads8")
+set(CMAKE_EXE_LINKER_FLAGS_RELEASE "/OPT:REF /OPT:ICF=10000 /LTCG")
+
+set(CMAKE_CXX_STANDARD 17)
+
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
+
+set(CMAKE_AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ui/")
+
+find_package(Qt5 COMPONENTS Widgets REQUIRED)
+
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+file(
+	GLOB SOURCES
+	"${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+	"${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
+)
+
+message(${SOURCES})
+
+file(
+	GLOB WIDGETS
+	"${CMAKE_CURRENT_SOURCE_DIR}/ui/*.ui"
+)
+
+add_executable(
+	Editor 
+	${WIDGETS}
+	${SOURCES}
+)
+
+target_link_libraries(Editor Qt5::Widgets)
