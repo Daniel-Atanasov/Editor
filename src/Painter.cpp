@@ -1,7 +1,13 @@
 #include "Painter.hpp"
 
+#include <QFlag>
+#include <QGuiApplication>
+#include <QTextLayout>
+#include <QTextOption>
+
 #include <QDebug>
-#include <QTime>
+
+#include "Vector.hpp"
 
 Painter::Painter(QWidget * widget) : painter(widget), clip_rect(painter.window())
 {
@@ -80,27 +86,47 @@ void Painter::DrawCharacter(QRect rect, char32_t ch)
     painter.drawText(rect, flags, QString::fromUcs4(&ch, 1));
 }
 
-void Painter::DrawText(QRect rect, String32 const& text, int flags)
+void Painter::DrawText(QRect rect, StringView32 text, int flags)
 {
     rect.moveTopLeft(Origin() + rect.topLeft());
-    painter.drawText(rect, flags, QString::fromStdU32String(text));
-}
+    painter.drawText(rect, flags, QString::fromUcs4(text.data(), text.size()));
 
-//void Painter::DrawText(QRect rect, String32 const& text, int flags)
-//{
-////#ifdef QT_DEBUG_DRAW
-////    if (qt_show_painter_debug_output)
-////        printf("QPainter::drawText(), r=[%d,%d,%d,%d], flags=%d, str='%s'\n",
-////            r.x(), r.y(), r.width(), r.height(), flags, str.toLatin1().constData());
-////#endif
-//    if (!painter.paintEngine() || text.empty || painter.pen().style() == Qt::NoPen)
-//        return;
-//
-//    qt_format_text(d->state->font, rect, flags, 0, 0, 0, 0, 0, this);
-//}
+    //int width = rect.width();
 
-void Painter::DrawText(QRect rect, char32_t * text, int size, int flags)
-{
-    rect.moveTopLeft(Origin() + rect.topLeft());
-    painter.drawText(rect, flags, QString::fromUcs4(text, size));
+    //double radius = (double)width / (double)text.size();
+    //double half_radius = radius / 2.0;
+    //double quarter_radius = half_radius / 2.0;
+
+    //QPainterPath path;
+
+    //double x = half_radius;
+    //for (int i = 0; i < text.size(); i++)
+    //{
+    //    double x1 = x - quarter_radius;
+    //    double y1 = -half_radius;
+
+    //    double x2 = x + quarter_radius;
+    //    double y2 = half_radius;
+
+    //    path.quadTo(x1, y1, x, 0);
+    //    path.quadTo(x2, y2, x + half_radius, 0);
+
+    //    x += radius;
+    //}
+
+    //QPixmap pixmap(width, radius);
+    //pixmap.fill(Qt::transparent);
+    //{
+    //    QPen wavePen = painter.pen();
+    //    wavePen.setCapStyle(Qt::RoundCap);
+
+    //    QPainter imgPainter(&pixmap);
+    //    imgPainter.setPen(wavePen);
+    //    imgPainter.setRenderHint(QPainter::Antialiasing);
+    //    imgPainter.translate(0, half_radius);
+    //    imgPainter.drawPath(path);
+    //}
+
+    //rect.moveTop(rect.top() + (rect.height() * 3) / 4);
+    //painter.drawPixmap(rect.topLeft(), pixmap);
 }

@@ -12,6 +12,14 @@ Lexer::Lexer(Buffer * parent) : parent(parent)
 {
 }
 
+void Lexer::SetKeywordStyle(HashMap<String32, int> const& new_keywords)
+{
+    for (auto const& token : new_keywords)
+    {
+        SetKeywordStyle(token.first, token.second);
+    }
+}
+
 void Lexer::SetKeywordStyle(String32 keyword, int style)
 {
     keywords[std::move(keyword)] = style;

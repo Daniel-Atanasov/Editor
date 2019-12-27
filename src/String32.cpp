@@ -10,24 +10,8 @@ String32::String32(std::u32string && other) : std::u32string(std::forward<std::u
 {
 }
 
-String32::String32(char32_t const* other) : std::u32string(other)
+String32::String32(StringView32 other) : std::u32string(other)
 {
-}
-
-String32::String32(std::initializer_list<char32_t> list) : std::u32string(list)
-{
-}
-
-String32 &String32::operator=(std::u32string const& other)
-{
-    std::u32string::operator=(other);
-    return *this;
-}
-
-String32 &String32::operator=(std::u32string && other)
-{
-    std::u32string::operator=(std::forward<std::u32string>(other));
-    return *this;
 }
 
 int String32::size() const noexcept
@@ -72,6 +56,23 @@ String32 String32::middle(int idx) const
 String32 String32::middle(int idx, int count) const
 {
     return String32(std::u32string::begin() + idx, std::u32string::begin() + idx + count);
+}
+
+StringView32 String32::middle_view(int idx) const noexcept
+{
+    StringView32 view = *this;
+    return view.middle(idx);
+}
+
+StringView32 String32::middle_view(int idx, int count) const noexcept
+{
+    StringView32 view = *this;
+    return view.middle(idx, count);
+}
+
+void String32::insert(int idx, StringView32 text)
+{
+    std::u32string::insert(idx, text.data(), text.size());
 }
 
 void String32::insert(int idx, char32_t ch, int count)

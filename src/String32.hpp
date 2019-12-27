@@ -2,6 +2,9 @@
 #define STRING32_HPP
 
 #include <string>
+#include <charconv>
+
+#include "StringView32.hpp"
 
 class String32 : public std::u32string
 {
@@ -10,23 +13,17 @@ public:
     String32(String32 const&) = default;
     String32(String32 &&) = default;
 
+    using std::u32string::u32string;
+
     String32(std::u32string const& other);
     String32(std::u32string && other);
 
-    String32(char32_t const* other);
-
-    String32(std::initializer_list<char32_t> list);
-
-    template <typename T>
-    String32(T begin, T end) : std::u32string(begin, end)
-    {
-    }
+    String32(StringView32 other);
 
     String32 & operator=(String32 const&) = default;
     String32 & operator=(String32 &&) = default;
 
-    String32 & operator=(std::u32string const& other);
-    String32 & operator=(std::u32string && other);
+    using std::u32string::operator=;
 
     int size() const noexcept;
 
@@ -40,6 +37,10 @@ public:
     String32 middle(int idx) const;
     String32 middle(int idx, int count) const;
 
+    StringView32 middle_view(int idx) const noexcept;
+    StringView32 middle_view(int idx, int count) const noexcept;
+
+    void insert(int idx, StringView32 text);
     void insert(int idx, char32_t ch, int count = 1);
 
     void push_front(char32_t ch);
@@ -47,6 +48,28 @@ public:
 
     void remove(int idx, int count = 1);
 };
+
+template <typename Type>
+String32 ToString32(Type value)
+{
+    union Helper
+    {
+        char32_t u32[64];
+        char u8[64];
+    };
+
+    Helper h;
+
+    std::to_chars_result res = std::to_chars(std::begin(h.u8), std::end(h.u8), value);
+    int size = std::distance(h.u8, res.ptr);
+
+    for (int idx = size - 1; idx >= 0; idx--)
+    {
+        h.u32[idx] = h.u8[idx];
+    }
+
+    return String32(h.u32, size);
+}
 
 namespace std
 {

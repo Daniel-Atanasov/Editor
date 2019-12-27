@@ -10,6 +10,7 @@
 #include <QPaintEvent>
 
 #include "Painter.hpp"
+#include "Clipboard.hpp"
 
 QSize BufferWidget::VisibleCellArea()
 {
@@ -25,7 +26,6 @@ int BufferWidget::LastVisibleLine()
 
 void BufferWidget::EnsureCursorIsVisible()
 {
-    //    Position pos = buffer
 }
 
 void BufferWidget::EnsureVisibleAreaIsStyled()
@@ -88,12 +88,18 @@ BufferWidget::BufferWidget(QWidget * parent) : QWidget(parent), timer(this)
     connect(&timer, &QTimer::timeout,
         [this](...)
         {
+            qDebug() << "Updating lexer...";
+
             lexer.ClearKeywords();
 
-            for (String32 const& identifier : Jass::ScrapeFunctions(buffer.Text()))
-            {
-                lexer.SetKeywordStyle(identifier, JASS_FUNCTION);
-            }
+            lexer.SetKeywordStyle(Jass::Scrape(buffer.Text()));
+
+            lexer.SetKeywordStyle(U"integer", JASS_TYPE);
+            lexer.SetKeywordStyle(U"real", JASS_TYPE);
+            lexer.SetKeywordStyle(U"boolean", JASS_TYPE);
+            lexer.SetKeywordStyle(U"string", JASS_TYPE);
+            lexer.SetKeywordStyle(U"code", JASS_TYPE);
+            lexer.SetKeywordStyle(U"handle", JASS_TYPE);
 
             buffer.InvalidateStyles();
             EnsureVisibleAreaIsStyled();
@@ -142,25 +148,20 @@ BufferWidget::BufferWidget(QWidget * parent) : QWidget(parent), timer(this)
 
     keymap[Control & Qt::Key_A] = [this] { buffer.CursorSelectAll(); };
 
-    keymap[Qt::Key_Return] = [this] { buffer.CursorInsertText(U"\n"); };
-    keymap[Qt::Key_Enter]  = [this] { buffer.CursorInsertText(U"\n"); };
+    keymap[Qt::Key_Return] = [this] { return buffer.CursorInsertText(U"\n"); };
+    keymap[Qt::Key_Enter]  = [this] { return buffer.CursorInsertText(U"\n"); };
 
-    keymap[Qt::Key_Tab] = [this] { buffer.CursorInsertText(U"\t"); };
+    keymap[Qt::Key_Tab] = [this] { return buffer.CursorInsertText(U"\t"); };
 
-    keymap[Qt::Key_Backspace] = [this] { buffer.CursorDeletePrev(); };
-    keymap[Qt::Key_Delete]    = [this] { buffer.CursorDeleteNext(); };
+    keymap[Qt::Key_Backspace] = [this] { return buffer.CursorDeletePrev(); };
+    keymap[Qt::Key_Delete]    = [this] { return buffer.CursorDeleteNext(); };
 
-    keymap[Control & Qt::Key_Backspace] = [this] { buffer.CursorDeleteToPrevBorder(); };
-    keymap[Control & Qt::Key_Delete]    = [this] { buffer.CursorDeleteToNextBorder(); };
+    keymap[Control & Qt::Key_Backspace] = [this] { return buffer.CursorDeleteToPrevBorder(); };
+    keymap[Control & Qt::Key_Delete]    = [this] { return buffer.CursorDeleteToNextBorder(); };
+
+    keymap[Control & Qt::Key_V] = [this] { return buffer.DoPaste(); };
 
     UpdateScrollbar();
-
-    lexer.SetKeywordStyle(U"integer", JASS_TYPE);
-    lexer.SetKeywordStyle(U"real", JASS_TYPE);
-    lexer.SetKeywordStyle(U"boolean", JASS_TYPE);
-    lexer.SetKeywordStyle(U"string", JASS_TYPE);
-    lexer.SetKeywordStyle(U"code", JASS_TYPE);
-    lexer.SetKeywordStyle(U"handle", JASS_TYPE);
 
     buffer.SetLexer(&lexer);
 }
@@ -260,21 +261,16 @@ void BufferWidget::keyPressEvent(QKeyEvent * event)
 
     Hotkey hotkey(control, shift, alt, key);
 
-    bool is_hotkey = false;
-    if (keymap.count(hotkey))
+    if (keymap.contains(hotkey))
     {
-        is_hotkey = true;
-        keymap[hotkey]();
-    }
-    else if (keymap.count(key))
-    {
-        is_hotkey = true;
-        keymap[key]();
+        int changes = keymap[hotkey]();
+
+        if (changes != 0) timer.start();
     }
     else if (!text.empty())
     {
-        is_hotkey = false;
         buffer.CursorInsertText(text);
+        timer.start();
     }
 
     EnsureVisibleAreaIsStyled();
@@ -285,8 +281,6 @@ void BufferWidget::keyPressEvent(QKeyEvent * event)
     {
         UpdateScrollbar();
     }
-
-    timer.start();
 
     update();
 }

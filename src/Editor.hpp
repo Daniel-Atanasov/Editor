@@ -10,7 +10,6 @@ class Editor : public QMainWindow, private Ui::Editor
     Q_OBJECT
 
 private:
-    Buffer buffer;
 
 public:
     explicit Editor(QWidget * parent = nullptr);

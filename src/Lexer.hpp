@@ -40,6 +40,7 @@ protected:
 public:
     Lexer(Buffer * parent = nullptr);
 
+    void SetKeywordStyle(HashMap<String32, int> const& new_keywords);
     void SetKeywordStyle(String32 keyword, int style);
     void RemoveKeyword(String32 const& keyword);
 

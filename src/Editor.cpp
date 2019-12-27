@@ -10,8 +10,4 @@ Editor::Editor(QWidget * parent) :
     QMainWindow(parent)
 {
     setupUi(this);
-
-//    setContentsMargins(0, 0, 0, 0);
-//    layout()->setContentsMargins(0, 0, 0, 0);
-//    layout()->setSpacing(0);
 }

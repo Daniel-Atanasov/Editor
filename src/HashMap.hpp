@@ -7,7 +7,7 @@ template <typename KeyType, typename ValueType>
 class HashMap : public std::unordered_map<KeyType, ValueType>
 {
 private:
-    using PairType = std::pair<KeyType, ValueType>;
+    using PairType = std::pair<KeyType const, ValueType>;
 
 public:
     HashMap() = default;

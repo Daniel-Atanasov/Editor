@@ -11,14 +11,14 @@
 #include "Buffer.hpp"
 #include "LexerJass.hpp"
 
-#include "Hotkey.hpp"
+#include "KeyMap.hpp"
 
 class BufferWidget : public QWidget, private Ui::BufferWidget
 {
     Q_OBJECT
 
 private:
-    HashMap<Hotkey, std::function<void()>> keymap;
+    KeyMap keymap;
 
     Buffer buffer;
     LexerJass lexer;

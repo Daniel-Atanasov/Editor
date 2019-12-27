@@ -1,10 +1,10 @@
 #include "TokenizerJass.hpp"
 
+#include <map>
+
 #include "SpecialCharacters.hpp"
 
-#include <unordered_map>
-
-#include <QDebug>
+#include "LexerJass.hpp"
 
 namespace Jass
 {
@@ -80,7 +80,7 @@ namespace Jass
         return std::move(tokens);
     }
 
-    Token ReadCommentBlock(String32 const& text, int start, bool add_offset)
+    Token ReadCommentBlock(StringView32 text, int start, bool add_offset)
     {
         int stop = start;
 
@@ -104,7 +104,7 @@ namespace Jass
         return Token(TokenType::CommentBlock, start - add_offset * 2, stop, std::move(tokens));
     }
 
-    Token ReadStringLiteral(String32 const& text, int start, bool add_offset)
+    Token ReadStringLiteral(StringView32 text, int start, bool add_offset)
     {
         static String32 slash_escapes = U"\\nt\"";
         static String32 pipe_escapes = U"cnr";
@@ -160,7 +160,7 @@ namespace Jass
         return Token(TokenType::String, start - add_offset, stop, std::move(tokens));
     }
 
-    Token ReadRawcodeLiteral(String32 const& text, int start, bool add_offset)
+    Token ReadRawcodeLiteral(StringView32 text, int start, bool add_offset)
     {
         int stop = start;
         while (stop < text.size())
@@ -176,18 +176,18 @@ namespace Jass
         return Token(TokenType::Rawcode, start - add_offset, stop);
     }
 
-    Token ReadNumber(String32 const& text, int idx)
+    Token ReadNumber(StringView32 text, int idx)
     {
         int start = idx;
         int stop = start + 1;
         while (stop < text.size() && IsDigit(text[stop])) stop++;
 
-        String32 value = text.substr(start, stop - start);
+        String32 value = text.middle(start, stop - start);
 
         return Token(TokenType::Number, start, stop, std::move(value));
     }
 
-    Token ReadIdentifier(String32 const& text, int idx, bool ignore_keywords)
+    Token ReadIdentifier(StringView32 text, int idx, bool ignore_keywords)
     {
         int start = idx;
         int stop = start + 1;
@@ -195,11 +195,11 @@ namespace Jass
 
         TokenType type = TokenType::Identifier;
 
-        String32 value = text.substr(start, stop - start);
+        String32 value = text.middle(start, stop - start);
 
         if (!ignore_keywords)
         {
-            std::unordered_map<String32, TokenType> keywords
+            static HashMap<StringView32, TokenType> keywords
             {
                 {U"globals", TokenType::Globals},
                 {U"endglobals", TokenType::EndGlobals},
@@ -263,7 +263,7 @@ namespace Jass
         return Token(type, start, stop, std::move(value));
     }
 
-    Token NextToken(String32 const& text, int start)
+    Token NextToken(StringView32 text, int start)
     {
         auto at = [&text](int idx) -> char32_t
         {
@@ -289,148 +289,148 @@ namespace Jass
 
         switch (first)
         {
-            case U'(': type = TokenType::OpenParen;    break;
-            case U')': type = TokenType::CloseParen;   break;
-            case U'[': type = TokenType::OpenBracket;  break;
-            case U']': type = TokenType::CloseBracket; break;
-            case U'{': type = TokenType::OpenBrace;    break;
-            case U'}': type = TokenType::CloseBrace;   break;
-            case U'.': type = TokenType::Dot;          break;
-            case U',': type = TokenType::Comma;        break;
-            case U'=':
-                if (second == U'=')
+        case U'(': type = TokenType::OpenParen;    break;
+        case U')': type = TokenType::CloseParen;   break;
+        case U'[': type = TokenType::OpenBracket;  break;
+        case U']': type = TokenType::CloseBracket; break;
+        case U'{': type = TokenType::OpenBrace;    break;
+        case U'}': type = TokenType::CloseBrace;   break;
+        case U'.': type = TokenType::Dot;          break;
+        case U',': type = TokenType::Comma;        break;
+        case U'=':
+            if (second == U'=')
+            {
+                type = TokenType::Equal;
+                stop++;
+            }
+            else
+            {
+                type = TokenType::Assign;
+            }
+            break;
+        case U'+':
+            if (second == U'=')
+            {
+                type = TokenType::AssignAdd;
+                stop++;
+            }
+            else
+            {
+                type = TokenType::Add;
+            }
+            break;
+        case U'-':
+            if (second == U'=')
+            {
+                type = TokenType::AssignSub;
+                stop++;
+            }
+            else
+            {
+                type = TokenType::Sub;
+            }
+            break;
+        case U'*':
+            if (second == U'=')
+            {
+                type = TokenType::AssignMul;
+                stop++;
+            }
+            else
+            {
+                type = TokenType::Mul;
+            }
+            break;
+        case U'/':
+            if (second == U'*')
+            {
+                return ReadCommentBlock(text, stop + 1);
+            }
+            else if (second == U'/')
+            {
+                if (third == U'!')
                 {
-                    type = TokenType::Equal;
-                    stop++;
+                    type = TokenType::PreprocessorComment;
+                    stop += 2;
                 }
                 else
                 {
-                    type = TokenType::Assign;
+                    type = TokenType::CommentLine;
+                    stop += 1;
                 }
-                break;
-            case U'+':
-                if (second == U'=')
-                {
-                    type = TokenType::AssignAdd;
-                    stop++;
-                }
-                else
-                {
-                    type = TokenType::Add;
-                }
-                break;
-            case U'-':
-                if (second == U'=')
-                {
-                    type = TokenType::AssignSub;
-                    stop++;
-                }
-                else
-                {
-                    type = TokenType::Sub;
-                }
-                break;
-            case U'*':
-                if (second == U'=')
-                {
-                    type = TokenType::AssignMul;
-                    stop++;
-                }
-                else
-                {
-                    type = TokenType::Mul;
-                }
-                break;
-            case U'/':
-                if (second == U'*')
-                {
-                    return ReadCommentBlock(text, stop + 1);
-                }
-                else if (second == U'/')
-                {
-                    if (third == U'!')
-                    {
-                        type = TokenType::PreprocessorComment;
-                        stop += 2;
-                    }
-                    else
-                    {
-                        type = TokenType::CommentLine;
-                        stop += 1;
-                    }
 
-                    for (;;)
-                    {
-                        if (at(stop) == U'\n') break;
-                        if (at(stop) == U'\0') break;
-                        stop++;
-                    }
-                }
-                else if (second == U'=')
+                for (;;)
                 {
-                    type = TokenType::AssignDiv;
+                    if (at(stop) == U'\n') break;
+                    if (at(stop) == U'\0') break;
                     stop++;
                 }
-                else
-                {
-                    type = TokenType::Div;
-                }
-                break;
-            case U'<':
-                if (second == U'=')
-                {
-                    type = TokenType::LessEq;
-                    stop++;
-                }
-                else
-                {
-                    type = TokenType::Less;
-                }
-                break;
-            case U'>':
-                if (second == U'=')
-                {
-                    type = TokenType::MoreEq;
-                    stop++;
-                }
-                else
-                {
-                    type = TokenType::More;
-                }
-                break;
-            case U'!':
-                if (second == U'=')
-                {
-                    type = TokenType::NotEqual;
-                    stop++;
-                }
-                break;
-            case U'"':
-                return ReadStringLiteral(text, stop);
-            case U'\'':
-                return ReadRawcodeLiteral(text, stop);
-            default:
-                if (IsDigit(first))
-                {
-                    return ReadNumber(text, start);
-                }
-                else if (IsIdentifierChar(first))
-                {
-                    return ReadIdentifier(text, start);
-                }
+            }
+            else if (second == U'=')
+            {
+                type = TokenType::AssignDiv;
+                stop++;
+            }
+            else
+            {
+                type = TokenType::Div;
+            }
+            break;
+        case U'<':
+            if (second == U'=')
+            {
+                type = TokenType::LessEq;
+                stop++;
+            }
+            else
+            {
+                type = TokenType::Less;
+            }
+            break;
+        case U'>':
+            if (second == U'=')
+            {
+                type = TokenType::MoreEq;
+                stop++;
+            }
+            else
+            {
+                type = TokenType::More;
+            }
+            break;
+        case U'!':
+            if (second == U'=')
+            {
+                type = TokenType::NotEqual;
+                stop++;
+            }
+            break;
+        case U'"':
+            return ReadStringLiteral(text, stop);
+        case U'\'':
+            return ReadRawcodeLiteral(text, stop);
+        default:
+            if (IsDigit(first))
+            {
+                return ReadNumber(text, start);
+            }
+            else if (IsIdentifierChar(first))
+            {
+                return ReadIdentifier(text, start);
+            }
         }
 
         switch (type)
         {
-            case TokenType::String:
-            case TokenType::Rawcode:
-                return Token(type, start, stop, text.substr(start, stop - start));
-            default:
-                return Token(type, start, stop);
+        case TokenType::String:
+        case TokenType::Rawcode:
+            return Token(type, start, stop, text.middle(start, stop - start));
+        default:
+            return Token(type, start, stop);
         }
     }
 
-    Vector<Token> Tokenize(String32 const& text, int start)
+    Vector<Token> Tokenize(StringView32 text, int start)
     {
         Vector<Token> tokens;
         while (start < text.size())
@@ -441,22 +441,62 @@ namespace Jass
         return tokens;
     }
 
-    HashSet<String32> ScrapeFunctions(String32 const & text)
+    int NextMeaningfullToken(Vector<Token> const& tokens, int idx)
     {
-        HashSet<String32> functions;
+        for (;;)
+        {
+            if (idx == tokens.size())     return -1;
+            if (!tokens[idx].IsComment()) return idx;
+
+            idx++;
+        }
+    }
+
+    HashMap<String32, int> Scrape(StringView32 text)
+    {
+        HashMap<String32, int> keywords;
 
         Vector<Token> tokens = Tokenize(text);
-        for (int idx = 0; idx < tokens.size() - 1; idx++)
+
+        int prev_idx = 0;
+        do
         {
-            Token & a = tokens[idx];
-            Token & b = tokens[idx + 1];
+            int first_idx = NextMeaningfullToken(tokens, prev_idx);
+            if (first_idx == -1) break;
 
-            if (a.Is(TokenType::Function))
+            int second_idx = NextMeaningfullToken(tokens, first_idx + 1);
+            if (second_idx == -1) break;
+
+            Token & first = tokens[first_idx];
+            Token & second = tokens[second_idx];
+
+            prev_idx = second_idx;
+
+            if (second.Is(TokenType::Identifier))
             {
-                functions.insert(std::move(b).Value());
-            }
-        }
+                int style;
 
-        return functions;
+                switch (first.Type())
+                {
+                case TokenType::Function:
+                    style = JASS_FUNCTION;
+                    break;
+                case TokenType::Native:
+                    style = JASS_NATIVE;
+                    break;
+                case TokenType::Type:
+                case TokenType::String:
+                    style = JASS_TYPE;
+                    break;
+                default:
+                    continue;
+                }
+
+                keywords[std::move(second).Value()] = style;
+                prev_idx++;
+            }
+        } while (prev_idx != text.size());
+
+        return keywords;
     }
 }

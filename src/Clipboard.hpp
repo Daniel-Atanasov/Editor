@@ -2,6 +2,7 @@
 #define CLIPBOARD_HPP
 
 #include "String32.hpp"
+#include "Vector.hpp"
 
 class Clipboard
 {
@@ -17,7 +18,7 @@ private:
 public:
     static Clipboard & Instance();
 
-    String32 Text();
+    String32 Text() const;
 };
 
 #endif // CLIPBOARD_HPP

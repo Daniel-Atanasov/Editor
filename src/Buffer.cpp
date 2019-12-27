@@ -15,10 +15,8 @@
 
 #include "SpecialCharacters.hpp"
 
-void Buffer::SetText(QString const& text)
+void Buffer::SetText(TextView const& text)
 {
-    ClearCursors();
-
     lines.clear();
     styles.clear();
 
@@ -27,25 +25,11 @@ void Buffer::SetText(QString const& text)
 
     styles[0].push_back(STYLE_DEFAULT);
 
-    AddCursor({{0, 0}, {0, 0}});
-    Insert(cursors[0], text.toStdU32String());
-    cursors[0] = {{0, 0}, {0, 0}};
-}
+    Cursor cursor = { {0, 0}, {0, 0} };
 
-Position Buffer::FirstPosition()
-{
-    Position pos;
-    pos.x = 0;
-    pos.y = 0;
-    return pos;
-}
-
-Position Buffer::LastPosition()
-{
-    Position pos;
-    pos.y = LineCount() - 1;
-    pos.x = LineLength(pos.y);
-    return pos;
+    cursors = { cursor };
+    CursorReplaceText(text);
+    cursors = { cursor };
 }
 
 Position Buffer::DeleteAdjustedPosition(Position start, Position stop, Position pos)
@@ -67,373 +51,6 @@ Position Buffer::NewlineAdjustedPosition(Position insertion_pos, Position pos)
     return pos;
 }
 
-int Buffer::DistanceToPrevBorder(Position pos)
-{
-    int count = 0;
-    do
-    {
-        pos = PrevPosition(pos);
-        count++;
-    }
-    while (!IsOnBorder(pos));
-    return count;
-}
-
-int Buffer::DistanceToNextBorder(Position pos)
-{
-    int count = 0;
-    do
-    {
-        pos = NextPosition(pos);
-        count++;
-    }
-    while (!IsOnBorder(pos));
-    return count;
-}
-
-void Buffer::RemoveText(Cursor & cursor)
-{
-    Position start = cursor.start;
-    Position stop  = cursor.stop;
-
-    if (start > stop) std::swap(stop, start);
-
-    start.x = std::min(start.x, LineLength(start.y));
-    stop.x  = std::min(stop.x,  LineLength(stop.y));
-
-    if (stop.y == start.y)
-    {
-        lines[start.y].remove(start.x, stop.x - start.x);
-        styles[start.y].remove(start.x, stop.x - start.x);
-    }
-    else
-    {
-        lines[start.y].resize(start.x);
-        lines[start.y] += lines[stop.y].middle(stop.x);
-
-        lines.remove(start.y + 1, stop.y - start.y);
-
-        styles[start.y].resize(start.x);
-        styles[start.y] += styles[stop.y].middle(stop.x);
-
-        styles.remove(start.y + 1, stop.y - start.y);
-    }
-
-    cursor.start = start;
-    cursor.stop  = cursor.start;
-
-    InvalidateStyles(cursor.start.y);
-
-    for (Cursor & c : cursors)
-    {
-//        qDebug() << c.stop.x << c.stop.y;
-
-        c.start = DeleteAdjustedPosition(start, stop, c.start);
-        c.stop  = DeleteAdjustedPosition(start, stop, c.stop);
-
-//        qDebug() << c.stop.x << c.stop.y;
-    }
-}
-
-void Buffer::MoveLeft(Cursor & cursor, Qt::KeyboardModifiers modifiers)
-{
-    int count = 1;
-    if (modifiers & Qt::ControlModifier)
-    {
-        count = DistanceToPrevBorder(cursor.stop);
-    }
-
-    while(count--) cursor.stop = PrevPosition(cursor.stop);
-}
-
-void Buffer::MoveUp(Cursor & cursor, Qt::KeyboardModifiers modifiers)
-{
-    if (modifiers & Qt::AltModifier)
-    {
-        Cursor c;
-        c.start = cursor.start;
-        c.stop = cursor.stop;
-
-        if (c.start.y != 0) c.start.y--;
-        if (c.stop.y  != 0) c.stop.y--;
-
-        AddCursor(c);
-    }
-    else if (cursor.stop.y != 0)
-    {
-        cursor.stop.y--;
-    }
-}
-
-void Buffer::MoveRight(Cursor & cursor, Qt::KeyboardModifiers modifiers)
-{
-    int count = 1;
-    if (modifiers & Qt::ControlModifier)
-    {
-        count = DistanceToNextBorder(cursor.stop);
-    }
-
-    while(count--) cursor.stop = NextPosition(cursor.stop);
-}
-
-void Buffer::MoveDown(Cursor & cursor, Qt::KeyboardModifiers modifiers)
-{
-    if (modifiers & Qt::AltModifier)
-    {
-        Cursor c;
-        c.start = cursor.start;
-        c.stop = cursor.stop;
-
-        if (c.start.y != LineCount() - 1) c.start.y++;
-        if (c.stop.y  != LineCount() - 1) c.stop.y++;
-
-        AddCursor(c);
-    }
-    else if (cursor.stop.y != LineCount() - 1)
-    {
-        cursor.stop.y++;
-    }
-}
-
-void Buffer::MoveHome(Cursor & cursor, Qt::KeyboardModifiers modifiers)
-{
-    if (modifiers & Qt::ControlModifier)
-    {
-        cursor.stop.y = 0;
-    }
-
-    cursor.stop.x = 0;
-}
-
-void Buffer::MoveEnd(Cursor & cursor, Qt::KeyboardModifiers modifiers)
-{
-    if (modifiers & Qt::ControlModifier)
-    {
-        cursor.stop.y = std::max(0, LineCount() - 1);
-    }
-
-    cursor.stop.x = std::max(0, LineLength(cursor.stop.y));
-}
-
-void Buffer::SelectAllOld(Cursor & cursor, Qt::KeyboardModifiers)
-{
-    cursor.start.x = 0;
-    cursor.start.y = 0;
-    cursor.stop.x  = lines.back().size();
-    cursor.stop.y  = std::max(0, LineCount() - 1);
-}
-
-void Buffer::DeleteNext(Cursor & cursor, Qt::KeyboardModifiers modifiers)
-{
-    int count = (cursor.stop == cursor.start);
-    if ((modifiers & Qt::ControlModifier) && count)
-    {
-        count = DistanceToPrevBorder(cursor.stop);
-    }
-
-    while (count--) MoveLeft(cursor);
-
-    RemoveText(cursor);
-}
-
-void Buffer::DeletePrev(Cursor & cursor, Qt::KeyboardModifiers modifiers)
-{
-    int count = (cursor.stop == cursor.start);
-    if ((modifiers & Qt::ControlModifier) && count)
-    {
-        count = DistanceToNextBorder(cursor.stop);
-    }
-
-    while (count--) MoveRight(cursor);
-
-    RemoveText(cursor);
-}
-
-void Buffer::InsertNewLine(Cursor & cursor, Qt::KeyboardModifiers modifiers)
-{
-    Position insertion_pos = cursor.stop;
-    Position & pos = cursor.stop;
-
-    int right = std::max(0, LineLength(pos.y) - pos.x);
-
-    lines.insert(pos.y + 1, lines[pos.y].middle(pos.x));
-    lines[pos.y].remove(pos.x, right);
-
-    styles.insert(pos.y + 1, styles[pos.y].middle(pos.x));
-    styles[pos.y].remove(pos.x, right + 1);
-
-    int style;
-    if (pos.x != 0) style = StyleAt(PrevPosition(pos));
-    else            style = STYLE_DEFAULT;
-    styles[pos.y].push_back(style);
-
-    for (Cursor & c : cursors)
-    {
-        c.start = NewlineAdjustedPosition(insertion_pos, c.start);
-        c.stop  = NewlineAdjustedPosition(insertion_pos, c.stop);
-    }
-
-    if (!(modifiers & Qt::ControlModifier)) MoveRight(cursor);
-}
-
-void Buffer::Insert(Cursor & cursor, char32_t ch, Qt::KeyboardModifiers)
-{
-    if (IsLineBreak(ch))
-    {
-        InsertNewLine(cursor);
-    }
-    else
-    {
-        Position & start = cursor.start;
-        Position & stop = cursor.stop;
-
-        stop.x = std::min(stop.x, LineLength(stop.y));
-
-        int style;
-        if (stop.x != 0) style = StyleAt(PrevPosition(stop));
-        else             style = STYLE_DEFAULT;
-
-        int count = 1;
-        if (ch == '\t')
-        {
-            count = 4 - stop.x % 4;
-            lines[stop.y].insert(stop.x, ' ', count);
-            styles[stop.y].insert(stop.x, style, count);
-        }
-        else
-        {
-            lines[stop.y].insert(stop.x, ch);
-            styles[stop.y].insert(stop.x, style);
-        }
-
-        for (Cursor & c : cursors)
-        {
-            if (c.start.x > start.x && c.start.y == start.y) c.start.x += count;
-            if (c.stop.x  > stop.x  && c.stop.y  == stop.y)  c.stop.x  += count;
-        }
-
-        stop = NextPosition(stop, count);
-    }
-
-    InvalidateStyles(cursor.start.y);
-}
-
-void Buffer::Insert(Cursor & cursor, String32 const& text, Qt::KeyboardModifiers modifiers)
-{
-    for (char32_t ch : text) Insert(cursor, ch, modifiers);
-}
-
-void Buffer::HandleCursorInput(QKeyEvent *event)
-{
-    bool text_changed = false;
-    bool cursor_moved = false;
-
-    Qt::KeyboardModifiers modifiers = event->modifiers();
-
-    QString input = event->text();
-    for (Cursor & cursor : cursors)
-    {
-        switch (event->key())
-        {
-        case Qt::Key_Control:
-        case Qt::Key_Shift:
-        case Qt::Key_Alt:
-        case Qt::Key_CapsLock:
-            break;
-        case Qt::Key_Escape:
-            cursor = cursors[0];
-            break;
-        case Qt::Key_Left:
-            MoveLeft(cursor, modifiers);
-            cursor_moved = true;
-            break;
-        case Qt::Key_Up:
-            MoveUp(cursor, modifiers);
-            cursor_moved = true;
-            break;
-        case Qt::Key_Right:
-            MoveRight(cursor, modifiers);
-            cursor_moved = true;
-            break;
-        case Qt::Key_Down:
-            MoveDown(cursor, modifiers);
-            cursor_moved = true;
-            break;
-        case Qt::Key_Home:
-            MoveHome(cursor, modifiers);
-            cursor_moved = true;
-            break;
-        case Qt::Key_End:
-            MoveEnd(cursor, modifiers);
-            cursor_moved = true;
-            break;
-        case Qt::Key_Backspace:
-            DeleteNext(cursor, modifiers);
-            text_changed = true;
-            break;
-        case Qt::Key_Delete:
-            DeletePrev(cursor, modifiers);
-            text_changed = true;
-            break;
-        case Qt::Key_Return:
-        case Qt::Key_Enter:
-            RemoveText(cursor);
-            InsertNewLine(cursor, modifiers);
-            text_changed = true;
-            break;
-        case Qt::Key_Tab:
-            RemoveText(cursor);
-            do    Insert(cursor, ' ');
-            while (cursor.stop.x % 4 != 0);
-            text_changed = true;
-            break;
-        default:
-            text_changed = true;
-            RemoveText(cursor);
-            Insert(cursor, input.toStdU32String());
-            break;
-        }
-
-        if (text_changed || (cursor_moved && !(modifiers & Qt::ShiftModifier)))
-        {
-            cursor.start = cursor.stop;
-        }
-
-        //if (text_changed) emit TextChanged();
-    }
-}
-
-void Buffer::HandleKeyboardInput(QKeyEvent * event)
-{
-    Qt::KeyboardModifiers modifiers = event->modifiers();
-
-    int line_count = LineCount();
-
-    if (modifiers & Qt::ControlModifier)
-    {
-        switch (event->key())
-        {
-        case Qt::Key_A:
-            cursors.resize(1);
-            cursors[0].start.y = 0;
-            cursors[0].start.x = 0;
-            cursors[0].stop.y = std::max(LineCount() - 1, 0);
-            cursors[0].stop.x = lines.back().size();
-            break;
-        default:
-            HandleCursorInput(event);
-        }
-    }
-    else
-    {
-        HandleCursorInput(event);
-    }
-
-    //if (LineCount() != line_count) emit LineCountChanged();
-}
-
-
-
 void Buffer::PaintTextMargin(Painter & painter, int scroll)
 {
     QRect rect = painter.Rect();
@@ -451,7 +68,7 @@ void Buffer::PaintTextMargin(Painter & painter, int scroll)
         Position stop  = cursor.stop;
 
         start.x = std::min(start.x, LineLength(start.y));
-        stop.x  = std::min(stop.x,  LineLength(stop.y));
+        stop.x  = std::min(stop.x, LineLength(stop.y));
 
         start.y -= scroll;
         stop.y  -= scroll;
@@ -514,6 +131,13 @@ void Buffer::PaintTextMargin(Painter & painter, int scroll)
     int style = STYLE_DEFAULT;
     painter.SetPen(theme[style].forecolor);
 
+    // TODO@Daniel:
+    //  There is a visible slowdown in Debug with this, likely cause by switching QPen constantly
+    //  This could be optimized in a couple of ways, though I don't think it should be a problem in the first place?
+    //  Judging from VerySleepy benchmarks, it appears that there are some JSON shenanigans happening underneath
+    //  Minimizing pen changes should be a decent speedup
+    //  Ignoring whitespaces to reduce draw calls might be a bigger one, though
+
     for (int y = scroll; y < last_line; y++)
     {
         int x0 = 0;
@@ -531,7 +155,9 @@ void Buffer::PaintTextMargin(Painter & painter, int scroll)
                     int px = x0 * width;
                     int py = (y - scroll) * height;
                     QRect rect = QRect(px, py, width * size, height);
-                    painter.DrawText(rect, &lines[y][x0], size);
+
+                    StringView32 segment = lines[y].middle_view(x0, size);
+                    painter.DrawText(rect, segment);
 
                     x0 = x;
                 }
@@ -546,7 +172,9 @@ void Buffer::PaintTextMargin(Painter & painter, int scroll)
             int px = x0 * width;
             int py = (y - scroll) * height;
             QRect rect = QRect(px, py, width * size, height);
-            painter.DrawText(rect, &lines[y][x0], size);
+
+            StringView32 segment = lines[y].middle_view(x0, size);
+            painter.DrawText(rect, segment);
 
             x0 = x;
         }
@@ -568,9 +196,8 @@ void Buffer::PaintLineNumberMargin(Painter & painter, int scroll)
     QRect line_rect(0, 0, rect.width() - width, height);
     for (int idx = scroll + 1; idx <= last_line; idx++)
     {
-        QString number = QString::number(idx);
         int flags = Qt::AlignVCenter | Qt::AlignRight;
-        painter.DrawText(line_rect, number.toStdU32String(), flags);
+        painter.DrawText(line_rect, ToStringView32(idx), flags);
         line_rect.moveTop(line_rect.top() + height);
     }
 }
@@ -587,110 +214,27 @@ Buffer::Buffer()
     font = QFont("Consolas NF", 9);
     UpdateCellSize();
 
-    SetText("This is somekind of test");
+    SetText(U"This is somekind of test");
 
     style_pos.x = 0;
     style_pos.y = 0;
-//    StartStyling(style_pos);
-
-//    SetStyle(10, STYLE_KEYWORD);
 }
 
-char32_t Buffer::CharacterAt(Position pos)
+int Buffer::SelectionSizeTotal()
 {
-    if (pos.x == LineLength(pos.y)) return U'\n';
+    int count = 0;
 
-    return lines[pos.y][pos.x];
-}
-
-int Buffer::TextSize()
-{
-    return TextSize(FirstPosition(), LastPosition());
-}
-
-int Buffer::TextSize(Position start)
-{
-    return TextSize(start, LastPosition());
-}
-
-int Buffer::TextSize(Position start, Position stop)
-{
-    if (start.y == stop.y)
+    for (Cursor const& cursor : cursors)
     {
-        return stop.x - stop.y;
-    }
+        Position start = cursor.start;
+        Position stop  = cursor.stop;
 
-    int count = LineLength(start.y) - start.x + stop.x + 1;
+        if (stop < start) std::swap(start, stop);
 
-    for (int idx = start.y + 1; idx < stop.y; idx++)
-    {
-        count += LineLength(idx) + 1;
+        count += TextSize(start, stop);
     }
 
     return count;
-}
-
-String32 Buffer::Text()
-{
-    return Text(FirstPosition(), LastPosition());
-}
-
-String32 Buffer::Text(Position start)
-{
-    return Text(start, LastPosition());
-}
-
-String32 Buffer::Text(Position start, Position stop)
-{
-    String32 text;
-//    text.resize(TextSize(start, stop));
-
-    int idx = 0;
-    while (start < stop)
-    {
-        text.push_back(CharacterAt(start));
-
-        start = NextPosition(start);
-        idx++;
-    }
-
-    return text;
-}
-
-int Buffer::LineCount()
-{
-    return lines.size();
-}
-
-int Buffer::LineLength(int line_idx)
-{
-    return lines[line_idx].size();
-}
-
-int Buffer::MaximumLineLength()
-{
-    int max = 0;
-    for (String32 const& line : lines)
-    {
-        max = std::max(max, line.size());
-    }
-    return max;
-}
-
-Position Buffer::LineStart(int line_idx)
-{
-    Position pos;
-    pos.y = line_idx;
-    pos.x = 0;
-    return pos;
-}
-
-Position Buffer::LineEnd(int line_idx)
-{
-    Position pos;
-    pos.y = line_idx;
-    pos.x = LineLength(line_idx);
-    return pos;
 }
 
 void Buffer::SelectionClear()
@@ -908,7 +452,7 @@ void Buffer::CursorCloneUp()
         Cursor c = cursor;
 
         if (c.start.y != 0) c.start.y--;
-        if (c.stop.y  != 0) c.stop.y--;
+        if (c.stop.y != 0) c.stop.y--;
 
         new_cursors.push_back(c);
     }
@@ -930,7 +474,7 @@ void Buffer::CursorCloneDown()
         Cursor c = cursor;
 
         if (c.start.y != max_y) c.start.y++;
-        if (c.stop.y  != max_y) c.stop.y++;
+        if (c.stop.y != max_y) c.stop.y++;
 
         new_cursors.push_back(c);
     }
@@ -941,7 +485,7 @@ void Buffer::CursorCloneDown()
     }
 }
 
-void Buffer::CursorDeletePrev()
+int Buffer::CursorDeletePrev()
 {
     for (Cursor & cursor : cursors)
     {
@@ -952,10 +496,10 @@ void Buffer::CursorDeletePrev()
     }
 
     ConsolidateCursors();
-    CursorDeleteSelection();
+    return CursorDeleteSelection();
 }
 
-void Buffer::CursorDeleteNext()
+int Buffer::CursorDeleteNext()
 {
     for (Cursor & cursor : cursors)
     {
@@ -966,10 +510,10 @@ void Buffer::CursorDeleteNext()
     }
 
     ConsolidateCursors();
-    CursorDeleteSelection();
+    return CursorDeleteSelection();
 }
 
-void Buffer::CursorDeleteToPrevBorder()
+int Buffer::CursorDeleteToPrevBorder()
 {
     for (Cursor & cursor : cursors)
     {
@@ -981,10 +525,10 @@ void Buffer::CursorDeleteToPrevBorder()
     }
 
     ConsolidateCursors();
-    CursorDeleteSelection();
+    return CursorDeleteSelection();
 }
 
-void Buffer::CursorDeleteToNextBorder()
+int Buffer::CursorDeleteToNextBorder()
 {
     for (Cursor & cursor : cursors)
     {
@@ -996,92 +540,130 @@ void Buffer::CursorDeleteToNextBorder()
     }
 
     ConsolidateCursors();
-    CursorDeleteSelection();
+    return CursorDeleteSelection();
 }
 
-void Buffer::CursorReplaceText(String32 const& text)
+int Buffer::CursorReplaceText(TextView const& text)
 {
-    CursorDeleteSelection();
+    int deleted_count = CursorDeleteSelection();
 
-    for (Cursor & cursor : cursors)
+    StringView32 first_line = text.FirstLine();
+    StringView32 last_line = text.LastLine();
+
+    int line_count = text.LineCount();
+    for (int idx = 0; idx < cursors.size(); idx++)
     {
-        Insert(cursor, text);
+        Position & start = cursors[idx].start;
+        Position & stop  = cursors[idx].stop;
+
+        int style;
+        if (start.x != 0) style = StyleAt(PrevPosition(start));
+        else              style = STYLE_DEFAULT;
+
+        if (line_count == 1)
+        {
+            int size = first_line.size();
+
+            lines[start.y].insert(start.x, first_line);
+            styles[start.y].insert(start.x, style, first_line.size());
+
+            for (int inner_idx = idx + 1; inner_idx < cursors.size(); inner_idx++)
+            {
+                Cursor & cursor = cursors[inner_idx];
+
+                Position & st = cursor.start;
+                Position & sp = cursor.stop;
+
+                if (st.y == start.y && st.x >= start.x) st.x += size;
+                if (sp.y == start.y && sp.x >= start.x) sp.x += size;
+            }
+
+            stop.x += size;
+        }
+        else
+        {
+            int added_line_count = line_count - 1;
+
+            lines.insert(start.y + 1, {}, added_line_count);
+            styles.insert(start.y + 1, {}, added_line_count);
+
+            String32 & cursor_line = lines[start.y];
+
+            StringView32 first_half = cursor_line.middle_view(0, start.x);
+            StringView32 second_half = cursor_line.middle_view(start.x);
+
+            Position pos = start;
+            for (int inner_idx = idx; inner_idx < cursors.size(); inner_idx++)
+            {
+                Cursor & cursor = cursors[inner_idx];
+
+                Position & st = cursor.start;
+                Position & sp = cursor.stop;
+
+                int dx = last_line.size() - first_half.size();
+
+                if (st.y == pos.y && st.x >= pos.x)
+                {
+                    st.x += dx;
+                    st.y += added_line_count;
+                }
+                else if (st.y > pos.y)
+                {
+                    st.y += added_line_count;
+                }
+
+                if (sp.y == pos.y && sp.x >= pos.x)
+                {
+                    sp.x += dx;
+                    sp.y += added_line_count;
+                }
+                else if (sp.y > pos.y)
+                {
+                    sp.y += added_line_count;
+                }
+            }
+            start = pos;
+
+            int last_line_idx = start.y + added_line_count;
+
+            lines[last_line_idx].reserve(second_half.size() + last_line.size());
+
+            lines[last_line_idx] = second_half;
+            styles[last_line_idx] = styles[start.y].middle(start.x, second_half.size());
+
+            for (int line_idx = 1; line_idx < line_count; line_idx++)
+            {
+                Position line_start = LineStart(start.y + line_idx);
+                StringView32 line_text = text.LineAt(line_idx);
+
+                lines[line_start.y].insert(0, line_text);
+
+                styles[line_start.y].insert(0, style, line_text.size());
+                styles[line_start.y].push_back(style);
+            }
+
+            lines[start.y].reserve(first_half.size() + first_line.size());
+            lines[start.y].resize(first_half.size());
+            lines[start.y] += first_line;
+            styles[start.y].resize(first_half.size());
+            styles[start.y].resize(first_half.size() + first_line.size() + 1, style);
+        }
     }
 
-    //    int start = 0;
-
-    //    while (start < text.size())
-    //    {
-    //        int stop = text.index_of_newline(start);
-    //        if (stop == -1) stop = text.size();
-
-    //        for (int outer = 0; outer < cursors.size(); outer++)
-    //        {
-    //            Cursor & cursor = cursors[outer];
-
-    //            int style;
-    //            if (cursor.stop == FirstPosition()) style = STYLE_DEFAULT;
-    //            else                                style = StyleAt(cursor.stop);
-
-    //            for (int inner = outer + 1; inner < cursors.size(); inner++)
-    //            {
-
-    //            }
-    //        }
-    //    }
-
-    //    for (Cursor & cursor : cursors)
-    //    {
-    //        if (IsLineBreak(ch))
-    //        {
-    //            InsertNewLine(cursor);
-    //        }
-    //        else
-    //        {
-    //            Position & start = cursor.start;
-    //            Position & stop = cursor.stop;
-
-    //            stop.x = std::min(stop.x, LineLength(stop.y));
-
-    //            int style;
-    //            if (stop.x != 0) style = StyleAt(PrevPosition(stop));
-    //            else             style = STYLE_DEFAULT;
-
-    //            lines[stop.y].insert(stop.x, ch);
-    //            styles[stop.y].insert(stop.x, style);
-
-//            for (Cursor & c : cursors)
-//            {
-//                if (c.start.x > start.x && c.start.y == start.y) c.start.x++;
-//                if (c.stop.x  > stop.x  && c.stop.y  == stop.y)  c.stop.x++;
-//            }
-
-//            MoveRight(cursor);
-//        }
-
-//        InvalidateStyles(cursor.start.y);
-//    }
+    return deleted_count + text.TextSize() * cursors.size();
 }
 
-void Buffer::CursorReplaceText(Vector<String32> const& text)
+int Buffer::CursorInsertText(TextView const& text)
 {
-    CursorDeleteSelection();
-}
-
-void Buffer::CursorInsertText(String32 const& text)
-{
-    CursorReplaceText(text);
+    int size = CursorReplaceText(text);
     SelectionClear();
+    return size;
 }
 
-void Buffer::CursorInsertText(Vector<String32> const& text)
+int Buffer::CursorDeleteSelection()
 {
-    CursorReplaceText(text);
-    SelectionClear();
-}
+    int size = SelectionSizeTotal();
 
-void Buffer::CursorDeleteSelection()
-{
     for (Cursor & cursor : cursors)
     {
         Position start = cursor.start;
@@ -1090,7 +672,7 @@ void Buffer::CursorDeleteSelection()
         if (start > stop) std::swap(stop, start);
 
         start.x = std::min(start.x, LineLength(start.y));
-        stop.x  = std::min(stop.x,  LineLength(stop.y));
+        stop.x  = std::min(stop.x, LineLength(stop.y));
 
         if (stop.y == start.y)
         {
@@ -1100,7 +682,7 @@ void Buffer::CursorDeleteSelection()
         else
         {
             lines[start.y].resize(start.x);
-            lines[start.y] += lines[stop.y].middle(stop.x);
+            lines[start.y] += lines[stop.y].middle_view(stop.x);
 
             lines.remove(start.y + 1, stop.y - start.y);
 
@@ -1121,6 +703,8 @@ void Buffer::CursorDeleteSelection()
             c.stop  = DeleteAdjustedPosition(start, stop, c.stop);
         }
     }
+
+    return -size;
 }
 
 void Buffer::ConsolidateCursors()
@@ -1156,75 +740,6 @@ void Buffer::ConsolidateCursors()
     }
 }
 
-bool Buffer::IsOnBorder(Position pos)
-{
-    int line_length = LineLength(pos.y);
-    if (pos.x == 0)           return pos.y == 0 || line_length != 0;
-    if (pos.x == line_length) return true;
-
-    char32_t ch1 = lines[pos.y][pos.x - 1];
-    char32_t ch2 = lines[pos.y][pos.x];
-
-    if (IsSpace(ch1))          return !IsSpace(ch2);
-    if (IsIdentifierChar(ch1)) return !IsIdentifierChar(ch2);
-
-    return true;
-}
-
-Position Buffer::PrevPosition(Position pos, int count)
-{
-    while (count != 0)
-    {
-        int line_size = LineLength(pos.y);
-
-        pos.x = std::min(pos.x, line_size);
-        if (pos.x != 0)
-        {
-            int new_x = std::max(0, pos.x - count);
-            count -= pos.x - new_x;
-            pos.x = new_x;
-        }
-        else if (pos.y != 0)
-        {
-            count--;
-            pos.y--;
-            pos.x = LineLength(pos.y);
-        }
-        else
-        {
-            break;
-        }
-    }
-    return pos;
-}
-
-Position Buffer::NextPosition(Position pos, int count)
-{
-    while (count != 0)
-    {
-        int line_size = LineLength(pos.y);
-
-        pos.x = std::min(pos.x, line_size);
-        if (pos.x != line_size)
-        {
-            int new_x = std::min(line_size, pos.x + count);
-            count -= new_x - pos.x;
-            pos.x = new_x;
-        }
-        else if (pos.y != LineCount() - 1)
-        {
-            count--;
-            pos.y++;
-            pos.x = 0;
-        }
-        else
-        {
-            break;
-        }
-    }
-    return pos;
-}
-
 int Buffer::StyleAt(Position pos)
 {
     if (pos.x > LineLength(pos.y)) return STYLE_DEFAULT;
@@ -1254,7 +769,7 @@ void Buffer::EnsureStyled(Position pos)
 {
     if (lexer != nullptr && style_pos <= pos)
     {
-        lexer->Style(style_pos, NextPosition(pos));
+        lexer->Style(style_pos, pos);
 
         style_pos = pos;
     }
@@ -1262,7 +777,14 @@ void Buffer::EnsureStyled(Position pos)
 
 void Buffer::EnsureStyled(int line_idx)
 {
-    EnsureStyled(LineEnd(line_idx));
+    if (line_idx == LineCount() - 1)
+    {
+        EnsureStyled(LastPosition());
+    }
+    else
+    {
+        EnsureStyled(LineStart(line_idx + 1));
+    }
 }
 
 void Buffer::InvalidateStyles()
@@ -1352,17 +874,10 @@ void Buffer::SetFontName(QString const& name)
     UpdateCellSize();
 }
 
-void Buffer::DoPaste()
+int Buffer::DoPaste()
 {
-    int line_count = LineCount();
-
     String32 text = Clipboard::Instance().Text();
-    for (Cursor & cursor : cursors)
-    {
-        RemoveText(cursor);
-        Insert(cursor, text);
-        cursor.start = cursor.stop;
-    }
+    return CursorInsertText(text);
 }
 
 void Buffer::DoCopy()
@@ -1377,13 +892,7 @@ void Buffer::ZoomIn(int amount)
 
 void Buffer::ZoomOut(int amount)
 {
-    SetPointSize(std::max(font.pointSize() - amount, 0));
-}
-
-void Buffer::KeyPress(QKeyEvent * event)
-{
-    HandleKeyboardInput(event);
-    ConsolidateCursors();
+    SetPointSize(std::max(font.pointSize() - amount, 1));
 }
 
 void Buffer::Paint(Painter & painter, int scroll)
