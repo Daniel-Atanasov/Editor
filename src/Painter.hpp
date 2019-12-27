@@ -35,8 +35,6 @@ public:
     void DrawLine(int x, int y, int w, int h);
     void DrawLine(QPoint const& start, QPoint const& stop);
     void DrawCharacter(QRect rect, char32_t ch);
-    //void DrawText(QRect rect, String32 const& text, int flags = Qt::AlignHCenter | Qt::AlignVCenter);
-    //void DrawText(QRect rect, char32_t * text, int size, int flags = Qt::AlignHCenter | Qt::AlignVCenter);
     void DrawText(QRect rect, StringView32 text, int flags = Qt::AlignHCenter | Qt::AlignVCenter);
 };
 
