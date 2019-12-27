@@ -1,7 +1,4 @@
-﻿# CMakeList.txt : CMake project for Editor, include source and define
-# project specific logic here.
-#
-cmake_minimum_required (VERSION 3.15)
+﻿cmake_minimum_required (VERSION 3.15)
 cmake_policy(SET CMP0091 NEW)
 
 if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
