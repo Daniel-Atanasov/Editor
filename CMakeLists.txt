@@ -36,8 +36,6 @@ file(
 	"${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
 )
 
-message(${SOURCES})
-
 file(
 	GLOB WIDGETS
 	"${CMAKE_CURRENT_SOURCE_DIR}/ui/*.ui"
