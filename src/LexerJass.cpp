@@ -30,8 +30,13 @@ void LexerJass::StyleToken(Token const& token, int start)
 	case Jass::TokenType::String:
 		for (Jass::Token const& sequence : token.Tokens())
 		{
+			int style = STYLE_DOUBLE_QUOTE_ESCAPE_VALID;
+			if (sequence.Is(Jass::TokenType::InvalidEscapeSequence))
+			{
+				style = STYLE_DOUBLE_QUOTE_ESCAPE_INVALID;
+			}
 			Parent()->SetStyle(sequence.Start() - start, STYLE_DOUBLE_QUOTE_STRING);
-			Parent()->SetStyle(sequence.Length(), STYLE_DOUBLE_QUOTE_ESCAPE_VALID);
+			Parent()->SetStyle(sequence.Length(), style);
 
 			start = sequence.Stop();
 		}

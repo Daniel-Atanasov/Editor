@@ -27,6 +27,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ui/")
 
 find_package(Qt5 COMPONENTS Widgets REQUIRED)
+find_package(Freetype REQUIRED)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
@@ -47,4 +48,4 @@ add_executable(
 	${SOURCES}
 )
 
-target_link_libraries(Editor Qt5::Widgets)
+target_link_libraries(Editor Qt5::Widgets Freetype::Freetype)

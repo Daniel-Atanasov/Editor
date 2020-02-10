@@ -47,4 +47,6 @@ bool IsDigit(char32_t ch);
 bool IsAsciiLetter(char32_t ch);
 bool IsIdentifierChar(char32_t ch);
 
+int TabWidth(int pos);
+
 #endif // SPECIALCHARACTERS_HPP

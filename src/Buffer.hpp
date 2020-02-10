@@ -13,6 +13,11 @@
 
 #include "Lexer.hpp"
 
+enum WhitespaceFlag
+{
+    EXPAND_TABS
+};
+
 class Buffer : public TextContainer<Buffer>
 {
 private:
@@ -24,10 +29,16 @@ private:
     Vector<String32> lines;
     Vector<Vector<int>> styles;
 
+    // TODO@Daniel:
+    //  Cleanup font stuff
     QFont font;
+    QFontMetrics metrics;
     QSize cell_size;
+    int baseline;
 
     Position style_pos;
+
+    int flags = EXPAND_TABS;
 
 protected:
     void SetText(TextView const& text);
@@ -38,10 +49,13 @@ protected:
     void PaintTextMargin(Painter & painter, int scroll);
     void PaintLineNumberMargin(Painter & painter, int scroll);
 
-    void UpdateCellSize();
+    void UpdateFontMetrics();
 
 public:
     Buffer();
+
+    bool Flag(int flag);
+    void SetFlag(int flag, bool value = true);
 
     int SelectionSizeTotal();
 
@@ -95,6 +109,8 @@ public:
 
     int CursorDeleteSelection();
 
+    int ConvertTabsToSpaces();
+
     void ConsolidateCursors();
 
     int StyleAt(Position pos);
@@ -116,10 +132,12 @@ public:
     int LineNumberMarginWidth();
 
     void ClearCursors();
-    void AddCursor(const Cursor &cursor);
+    void AddCursor(Cursor cursor);
 
-    Cursor const& FirstCursor();
-    Cursor const& LastCursor();
+    int CursorCount();
+
+    Cursor FirstCursor();
+    Cursor LastCursor();
 
     void AddLineSelection(int line_idx);
     void AddWordSelection(Position pos);
@@ -128,6 +146,7 @@ public:
     void SetFontName(QString const& name);
 
     int DoPaste();
+    int DoCut();
     void DoCopy();
 
     void ZoomIn(int amount = 1);

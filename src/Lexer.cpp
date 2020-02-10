@@ -1,6 +1,5 @@
 #include "Lexer.hpp"
 
-#include "Buffer.hpp"
 #include "Theme.hpp"
 
 Buffer * Lexer::Parent()

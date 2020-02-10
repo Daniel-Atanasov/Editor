@@ -9,24 +9,26 @@
 #include "Cursor.hpp"
 #include "SpecialCharacters.hpp"
 
-template <typename DerivedType>
+class TextView;
+
+template <typename DerivedType, typename TextView = TextView>
 class TextContainer
 {
 private:
-    auto & Lines()
+    auto & Lines() noexcept
     {
         DerivedType * that = (DerivedType*)this;
         return that->lines;
     }
 
-    auto const& Lines() const
+    auto const& Lines() const noexcept
     {
         DerivedType const* that = (DerivedType const*)this;
         return that->lines;
     }
 
 protected:
-    Position FirstPosition() const
+    Position FirstPosition() const noexcept
     {
         Position pos;
         pos.x = 0;
@@ -34,7 +36,7 @@ protected:
         return pos;
     }
 
-    Position LastPosition() const
+    Position LastPosition() const noexcept
     {
         Position pos;
         pos.y = LineCount() - 1;
@@ -42,7 +44,7 @@ protected:
         return pos;
     }
 
-    int DistanceToPrevBorder(Position pos) const
+    int DistanceToPrevBorder(Position pos) const noexcept
     {
         int count = 0;
         do
@@ -53,7 +55,7 @@ protected:
         return count;
     }
 
-    int DistanceToNextBorder(Position pos) const
+    int DistanceToNextBorder(Position pos) const noexcept
     {
         int count = 0;
         do
@@ -65,39 +67,39 @@ protected:
     }
 
 public:
-    StringView32 LineAt(int idx) const
+    StringView32 LineAt(int idx) const noexcept
     {
         return Lines()[idx];
     }
 
-    StringView32 FirstLine() const
+    StringView32 FirstLine() const noexcept
     {
         return LineAt(0);
     }
 
-    StringView32 LastLine() const
+    StringView32 LastLine() const noexcept
     {
         return LineAt(LineCount() - 1);
     }
     
-    char32_t CharacterAt(Position pos) const
+    char32_t CharacterAt(Position pos) const noexcept
     {
         if (pos.x == LineLength(pos.y)) return U'\n';
 
         return Lines()[pos.y][pos.x];
     }
 
-    int TextSize() const
+    int TextSize() const noexcept
     {
         return TextSize(FirstPosition(), LastPosition());
     }
 
-    int TextSize(Position start) const
+    int TextSize(Position start) const noexcept
     {
         return TextSize(start, LastPosition());
     }
 
-    int TextSize(Position start, Position stop) const
+    int TextSize(Position start, Position stop) const noexcept
     {
         if (start.y == stop.y)
         {
@@ -112,6 +114,38 @@ public:
         }
 
         return count;
+    }
+
+    TextView View() const
+    {
+        return TextView(Lines());
+    }
+
+    TextView View(Position start) const
+    {
+        return View(start, LastPosition());
+    }
+
+    TextView View(Position start, Position stop) const
+    {
+        if (start.y == stop.y)
+        {
+            return Lines()[start.y].middle_view(start.x, stop.x - start.x);
+        }
+
+        Vector<StringView32> lines;
+        lines.reserve(stop.y - start.y + 1);
+
+        lines.push_back(Lines()[start.y].middle_view(start.x));
+
+        for (int idx = start.y = 1; idx < stop.y idx++)
+        {
+            lines.push_back(Lines()[idx]);
+        }
+
+        lines.push_back(Lines()[stop.y].middle_view(0, stop.x));
+
+        return lines;
     }
 
     String32 Text() const
@@ -146,17 +180,22 @@ public:
         return text;
     }
 
-    int LineCount() const
+    int LineCount() const noexcept
     {
         return Lines().size();
     }
 
-    int LineLength(int line_idx) const
+    int LineLength(int line_idx) const noexcept
     {
         return Lines()[line_idx].size();
     }
 
-    int MaximumLineLength() const
+    int TabAdjustedLineLength(int idx) const noexcept
+    {
+        return Lines()[idx].tab_adjusted_size();
+    }
+
+    int MaximumLineLength() const noexcept
     {
         int max = 0;
         for (int idx = 0; idx < LineCount(); idx++)
@@ -166,23 +205,46 @@ public:
         return max;
     }
 
-    Position LineStart(int line_idx) const
+    int MaximumTabAdjustedLineLength() const noexcept
+    {
+        int max = 0;
+        for (int idx = 0; idx < LineCount(); idx++)
+        {
+            max = std::max(max, TabAdjustedLineLength(idx));
+        }
+        return max;
+    }
+
+    Position LineStart(int idx) const noexcept
     {
         Position pos;
-        pos.y = line_idx;
+        pos.y = idx;
         pos.x = 0;
         return pos;
     }
 
-    Position LineEnd(int line_idx) const
+    Position LineEnd(int idx) const noexcept
     {
         Position pos;
-        pos.y = line_idx;
-        pos.x = LineLength(line_idx);
+        pos.y = idx;
+        pos.x = LineLength(idx);
         return pos;
     }
 
-    bool IsOnBorder(Position pos) const
+    Position ClampPosition(Position pos) const noexcept
+    {
+        Position last_pos = LastPosition();
+        if (pos > last_pos)
+        {
+            return last_pos;
+        }
+
+        pos.x = std::min(pos.x, LineLength(pos.y));
+
+        return pos;
+    }
+
+    bool IsOnBorder(Position pos) const noexcept
     {
         int line_length = LineLength(pos.y);
         if (pos.x == 0)           return pos.y == 0 || line_length != 0;
@@ -197,7 +259,7 @@ public:
         return true;
     }
 
-    Position PrevPosition(Position pos, int count = 1) const
+    Position PrevPosition(Position pos, int count = 1) const noexcept
     {
         while (count != 0)
         {
@@ -224,7 +286,7 @@ public:
         return pos;
     }
 
-    Position NextPosition(Position pos, int count = 1) const
+    Position NextPosition(Position pos, int count = 1) const noexcept
     {
         while (count != 0)
         {

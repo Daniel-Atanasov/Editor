@@ -66,3 +66,8 @@ bool IsIdentifierChar(char32_t ch)
 {
     return IsDigit(ch) || IsAsciiLetter(ch) || ch == '_';
 }
+
+int TabWidth(int pos)
+{
+    return 4 - (pos & 0b11);
+}

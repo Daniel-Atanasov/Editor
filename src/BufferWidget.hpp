@@ -25,14 +25,23 @@ private:
 
     QTimer timer;
 
-    QSize VisibleCellArea();
+    int CellWidth();
+    int CellHeight();
 
+    QSize CellArea();
+
+    int FirstVisibleLine();
     int LastVisibleLine();
+
+    Position FirstVisiblePosition();
+    Position LastVisiblePosition();
 
     void EnsureCursorIsVisible();
 
     void EnsureVisibleAreaIsStyled();
 
+    int VScroll();
+    void SetVScroll(int value);
     void ScrollUp(int amount = 1);
     void ScrollDown(int amount = 1);
 

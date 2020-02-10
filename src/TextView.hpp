@@ -14,11 +14,6 @@ private:
     Vector<StringView32> lines;
 
 public:
-    // TODO@Daniel:
-    //  Read more on overload resolution - at a glance, char32* and String32& constructors should be redundant
-    //  From what I can tell, there is some ambiguity with implicit conversion which wasn't completely explained by the error message
-    //  Compiling with a more verbose flag would be handy in this case
-
     TextView() = default;
     TextView(TextView const& other) = default;
     TextView(TextView && other) = default;
@@ -31,6 +26,9 @@ public:
 
     TextView & operator=(TextView const& other) = default;
     TextView & operator=(TextView && other) = default;
+
+    // TODO@Daniel:
+    //  The following are mostly redundant, unless they get optmized
 
     TextView & operator=(char32_t const* text);
     TextView & operator=(StringView32 text);

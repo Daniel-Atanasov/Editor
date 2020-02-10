@@ -14,11 +14,8 @@ public:
     using std::u32string_view::u32string_view;
 
     StringView32(std::u32string_view other) noexcept;
-
     StringView32(String32 const& other) noexcept;
-
     StringView32(char32_t const* begin, char32_t const* end) noexcept;
-
     StringView32(std::initializer_list<char32_t> list) noexcept;
 
     StringView32 & operator=(StringView32 const& other) noexcept = default;
@@ -27,9 +24,12 @@ public:
     using std::u32string_view::operator=;
 
     int size() const noexcept;
+    int tab_adjusted_size() const noexcept;
+
+    int adjust_for_tabs(int pos) const noexcept;
+    int from_tab_adjusted(int pos) const noexcept;
 
     int index_of(char32_t ch, int start = 0) const noexcept;
-
     int index_of_newline(int start = 0) const noexcept;
 
     bool contains(char32_t ch) const noexcept;

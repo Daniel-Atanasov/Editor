@@ -9,8 +9,13 @@
 
 #include "Vector.hpp"
 
-Painter::Painter(QWidget * widget) : painter(widget), clip_rect(painter.window())
+Painter::Painter(QPaintDevice * widget) : painter(widget), clip_rect(painter.window())
 {
+    painter.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing);
+
+    //text_option.setFlags(Qt::TextExpandTabs);
+    text_option.setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    text_option.setTabStopDistance(100);
 }
 
 QRect Painter::Rect()
@@ -98,7 +103,6 @@ void Painter::DrawText(QRect rect, StringView32 text, int flags)
     //double quarter_radius = half_radius / 2.0;
 
     //QPainterPath path;
-
     //double x = half_radius;
     //for (int i = 0; i < text.size(); i++)
     //{
@@ -129,4 +133,13 @@ void Painter::DrawText(QRect rect, StringView32 text, int flags)
 
     //rect.moveTop(rect.top() + (rect.height() * 3) / 4);
     //painter.drawPixmap(rect.topLeft(), pixmap);
+}
+
+void Painter::DrawText(int x, int y, int w, int h, StringView32 text)
+{
+    int flags = Qt::AlignTop | Qt::AlignLeft;
+
+    x += X();
+    y += Y();
+    painter.drawText(x, y, w, h, flags, QString::fromUcs4(text.data(), text.size()));
 }

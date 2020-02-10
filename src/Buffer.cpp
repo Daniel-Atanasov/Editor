@@ -51,18 +51,18 @@ Position Buffer::NewlineAdjustedPosition(Position insertion_pos, Position pos)
     return pos;
 }
 
-void Buffer::PaintTextMargin(Painter & painter, int scroll)
+void Buffer::PaintTextMargin(Painter & painter, int first_line)
 {
     QRect rect = painter.Rect();
 
     painter.FillRect(rect, QColor(38, 50, 56));
 
-    int height = CellSize().height();
-    int width  = CellSize().width();
+    int ch = CellSize().height();
+    int cw = CellSize().width();
 
-    int last_line = std::min(rect.height() / height + scroll + 1, LineCount());
+    int max_cy = std::min(rect.height() / ch + first_line + 1, LineCount());
 
-    for (Cursor const& cursor : cursors)
+    for (Cursor cursor : cursors)
     {
         Position start = cursor.start;
         Position stop  = cursor.stop;
@@ -70,8 +70,19 @@ void Buffer::PaintTextMargin(Painter & painter, int scroll)
         start.x = std::min(start.x, LineLength(start.y));
         stop.x  = std::min(stop.x, LineLength(stop.y));
 
-        start.y -= scroll;
-        stop.y  -= scroll;
+        char32_t chr = CharacterAt(stop);
+
+        StringView32 start_line = lines[start.y];
+        StringView32 stop_line  = lines[stop.y];
+
+        start.x = start_line.adjust_for_tabs(start.x);
+        stop.x  = stop_line.adjust_for_tabs(stop.x);
+
+        start.y -= first_line;
+        stop.y  -= first_line;
+
+        if (stop.y < 0)        continue;
+        if (start.y >= max_cy) continue;
 
         Position pointer = stop;
 
@@ -80,27 +91,27 @@ void Buffer::PaintTextMargin(Painter & painter, int scroll)
         painter.SetPen(QColor(0, 0, 0));
         if (start.y == stop.y)
         {
-            int x = start.x * width;
-            int y = start.y * height;
-            int w = width * (stop.x - start.x);
-            int h = height;
+            int x = start.x * cw;
+            int y = start.y * ch;
+            int w = cw * (stop.x - start.x);
+            int h = ch;
             QRect selection_rect(x, y, w, h);
             painter.FillRect(selection_rect, QColor(85, 85, 85));
             painter.DrawRect(selection_rect);
         }
         else
         {
-            int top_x = start.x * width;
-            int top_y = start.y * height;
+            int top_x = start.x * cw;
+            int top_y = start.y * ch;
             int top_w = rect.width() - top_x;
-            int top_h = height;
+            int top_h = ch;
             QRect top_rect(top_x, top_y, top_w, top_h);
             painter.FillRect(top_rect, QColor(85, 85, 85));
 
             int bottom_x = 0;
-            int bottom_y = stop.y * height;
-            int bottom_w = stop.x * width;
-            int bottom_h = height;
+            int bottom_y = stop.y * ch;
+            int bottom_w = stop.x * cw;
+            int bottom_h = ch;
             QRect bottom_rect(bottom_x, bottom_y, bottom_w, bottom_h);
             painter.FillRect(bottom_rect, QColor(85, 85, 85));
 
@@ -121,8 +132,14 @@ void Buffer::PaintTextMargin(Painter & painter, int scroll)
             painter.DrawLine(bottom_w, bottom_y, mid_w - bottom_w, 0);
         }
 
+        int w = 1;
+        if (chr == U'\t')
+        {
+            w = 4 - (pointer.x & 0b11);
+        }
+
         painter.SetPen(QColor(255, 204, 0));
-        QRect cursor_rect(pointer.x * width, pointer.y * height, width, height);
+        QRect cursor_rect(pointer.x * cw, pointer.y * ch, w * cw, ch);
         painter.DrawRect(cursor_rect);
     }
 
@@ -131,52 +148,47 @@ void Buffer::PaintTextMargin(Painter & painter, int scroll)
     int style = STYLE_DEFAULT;
     painter.SetPen(theme[style].forecolor);
 
-    // TODO@Daniel:
-    //  There is a visible slowdown in Debug with this, likely cause by switching QPen constantly
-    //  This could be optimized in a couple of ways, though I don't think it should be a problem in the first place?
-    //  Judging from VerySleepy benchmarks, it appears that there are some JSON shenanigans happening underneath
-    //  Minimizing pen changes should be a decent speedup
-    //  Ignoring whitespaces to reduce draw calls might be a bigger one, though
+    int max_x = rect.right();
 
-    for (int y = scroll; y < last_line; y++)
+    for (int y = first_line; y < max_cy; y++)
     {
-        int x0 = 0;
-        int x = 0;
-        for (; x < LineLength(y); x++)
+        StringView32 line = lines[y];
+
+        int left = 0;
+        int top = (y - first_line) * ch;
+
+        int length = LineLength(y);
+
+        int total_padding = 0;
+        int last_x = 0;
+        for (int x = 0; x <= length; x++)
         {
             int next_style = styles[y][x];
-            if (style != next_style)
+            if (style != next_style || x == length || line[x] == U'\t')
             {
+                if (line[last_x] == U'\t')
+                {
+                    int padding = TabWidth(left);
+
+                    left += padding - 1;
+                    total_padding += padding;
+                }
+
                 style = next_style;
 
-                int size = x - x0;
+                int size = x - last_x;
                 if (size != 0)
                 {
-                    int px = x0 * width;
-                    int py = (y - scroll) * height;
-                    QRect rect = QRect(px, py, width * size, height);
+                    StringView32 segment = line.middle_view(last_x, size);
+                    painter.DrawText(left * cw, top, size * cw, ch, segment);
 
-                    StringView32 segment = lines[y].middle_view(x0, size);
-                    painter.DrawText(rect, segment);
+                    left += size;
 
-                    x0 = x;
+                    last_x = x;
                 }
 
                 painter.SetPen(theme[style].forecolor);
             }
-        }
-
-        int size = x - x0;
-        if (size != 0)
-        {
-            int px = x0 * width;
-            int py = (y - scroll) * height;
-            QRect rect = QRect(px, py, width * size, height);
-
-            StringView32 segment = lines[y].middle_view(x0, size);
-            painter.DrawText(rect, segment);
-
-            x0 = x;
         }
     }
 }
@@ -202,22 +214,34 @@ void Buffer::PaintLineNumberMargin(Painter & painter, int scroll)
     }
 }
 
-void Buffer::UpdateCellSize()
+void Buffer::UpdateFontMetrics()
 {
-    cell_size = QFontMetrics(font).size(Qt::TextSingleLine, "W");
+    // TODO@Daniel:
+    //  Kinda temporary
+    metrics = QFontMetrics(font);
+    cell_size = metrics.size(Qt::TextSingleLine, "W");
+    baseline = metrics.ascent();
 }
 
-Buffer::Buffer()
+Buffer::Buffer() : lines(1), styles(1, { STYLE_DEFAULT }), font("Consolas", 9), metrics(font)
 {
     lexer = nullptr;
 
-    font = QFont("Consolas NF", 9);
-    UpdateCellSize();
-
-    SetText(U"This is somekind of test");
+    UpdateFontMetrics();
 
     style_pos.x = 0;
     style_pos.y = 0;
+}
+
+bool Buffer::Flag(int flag)
+{
+    return flags & flag;
+}
+
+void Buffer::SetFlag(int flag, bool value)
+{
+    if (value) flags |= flag;
+    else       flags &= ~flag;
 }
 
 int Buffer::SelectionSizeTotal()
@@ -275,7 +299,14 @@ void Buffer::CursorAdjustUp(int count)
     {
         for (Cursor & cursor : cursors)
         {
-            cursor.stop.y = std::max(cursor.stop.y - 1, 0);
+            Position & stop = cursor.stop;
+
+            if (stop.y != 0)
+            {
+                int vx = lines[stop.y].adjust_for_tabs(stop.x);
+                stop.y--;
+                stop.x = lines[stop.y].from_tab_adjusted(vx);
+            }
         }
     }
 }
@@ -290,11 +321,19 @@ void Buffer::CursorAdjustRight(int count)
 
 void Buffer::CursorAdjustDown(int count)
 {
+    int max_y = LineCount() - 1;
     while (count--)
     {
         for (Cursor & cursor : cursors)
         {
-            cursor.stop.y = std::min(cursor.stop.y + 1, LineCount() - 1);
+            Position & stop = cursor.stop;
+
+            if (stop.y != max_y)
+            {
+                int vx = lines[stop.y].adjust_for_tabs(stop.x);
+                stop.y++;
+                stop.x = lines[stop.y].from_tab_adjusted(vx);
+            }
         }
     }
 }
@@ -446,13 +485,20 @@ void Buffer::CursorSelectAll()
 void Buffer::CursorCloneUp()
 {
     Vector<Cursor> new_cursors;
+    new_cursors.reserve(cursors.size());
 
-    for (Cursor cursor : cursors)
+    for (Cursor c : cursors)
     {
-        Cursor c = cursor;
+        Position pos = std::min(c.start, c.stop);
 
-        if (c.start.y != 0) c.start.y--;
-        if (c.stop.y != 0) c.stop.y--;
+        if (pos.y != 0)
+        {
+            int vx = lines[pos.y].adjust_for_tabs(pos.x);
+            pos.y--;
+            pos.x = lines[pos.y].from_tab_adjusted(vx);
+        }
+
+        c.start = c.stop = pos;
 
         new_cursors.push_back(c);
     }
@@ -466,15 +512,22 @@ void Buffer::CursorCloneUp()
 void Buffer::CursorCloneDown()
 {
     Vector<Cursor> new_cursors;
+    new_cursors.reserve(cursors.size());
 
     int max_y = LineCount() - 1;
 
-    for (Cursor cursor : cursors)
+    for (Cursor c : cursors)
     {
-        Cursor c = cursor;
+        Position pos = std::max(c.start, c.stop);
 
-        if (c.start.y != max_y) c.start.y++;
-        if (c.stop.y != max_y) c.stop.y++;
+        if (pos.y != max_y)
+        {
+            int vx = lines[pos.y].adjust_for_tabs(pos.x);
+            pos.y++;
+            pos.x = lines[pos.y].from_tab_adjusted(vx);
+        }
+
+        c.start = c.stop = pos;
 
         new_cursors.push_back(c);
     }
@@ -589,7 +642,7 @@ int Buffer::CursorReplaceText(TextView const& text)
 
             String32 & cursor_line = lines[start.y];
 
-            StringView32 first_half = cursor_line.middle_view(0, start.x);
+            StringView32 first_half  = cursor_line.middle_view(0, start.x);
             StringView32 second_half = cursor_line.middle_view(start.x);
 
             Position pos = start;
@@ -705,6 +758,36 @@ int Buffer::CursorDeleteSelection()
     }
 
     return -size;
+}
+
+int Buffer::ConvertTabsToSpaces()
+{
+    int total = 0;
+
+    int line_count = LineCount();
+    for (int y = 0; y < line_count; y++)
+    {
+        int count = 0;
+
+        int x = 0;
+        while ((x = lines[y].index_of(U'\t', x)) != -1)
+        {
+            int size = TabWidth(x);
+            lines[y].replace(x, 1, StringView32(U"    ", size));
+            styles[y].insert(x, styles[y][x], size - 1);
+            count += size - 1;
+
+            for (Cursor & c : cursors)
+            {
+                if (c.start.y == y && c.start.x > x) c.start.x += size - 1;
+                if (c.stop.y  == y && c.stop.x  > x) c.stop.x  += size - 1;
+            }
+        }
+
+        total += count;
+    }
+
+    return total;
 }
 
 void Buffer::ConsolidateCursors()
@@ -824,19 +907,24 @@ void Buffer::ClearCursors()
     cursors.clear();
 }
 
-void Buffer::AddCursor(Cursor const& cursor)
+void Buffer::AddCursor(Cursor cursor)
 {
     auto pred = [](Cursor const& lhs, Cursor const& rhs) { return lhs.stop < rhs.stop; };
     cursors.insert(std::upper_bound(cursors.begin(), cursors.end(), cursor, pred), cursor);
     ConsolidateCursors();
 }
 
-Cursor const& Buffer::FirstCursor()
+int Buffer::CursorCount()
+{
+    return cursors.size();
+}
+
+Cursor Buffer::FirstCursor()
 {
     return cursors.front();
 }
 
-Cursor const& Buffer::LastCursor()
+Cursor Buffer::LastCursor()
 {
     return cursors.back();
 }
@@ -865,13 +953,13 @@ void Buffer::AddWordSelection(Position pos)
 void Buffer::SetPointSize(int size)
 {
     font.setPointSize(size);
-    UpdateCellSize();
+    UpdateFontMetrics();
 }
 
 void Buffer::SetFontName(QString const& name)
 {
     font.setFamily(name);
-    UpdateCellSize();
+    UpdateFontMetrics();
 }
 
 int Buffer::DoPaste()
@@ -880,9 +968,29 @@ int Buffer::DoPaste()
     return CursorInsertText(text);
 }
 
+int Buffer::DoCut()
+{
+    DoCopy();
+    return CursorDeleteSelection();
+}
+
 void Buffer::DoCopy()
 {
+    String32 text;
+    text.reserve(SelectionSizeTotal());
+    for (int idx = 0; idx < cursors.size(); idx++)
+    {
+        Position start = cursors[idx].start;
+        Position stop  = cursors[idx].stop;
 
+        if (stop < start) std::swap(start, stop);
+
+        if (idx) text += U'\n';
+
+        text += Text(start, stop);
+    }
+
+    Clipboard::Instance().SetText(std::move(text));
 }
 
 void Buffer::ZoomIn(int amount)

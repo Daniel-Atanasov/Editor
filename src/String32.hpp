@@ -20,19 +20,22 @@ public:
 
     String32(StringView32 other);
 
-    String32 & operator=(String32 const&) = default;
-    String32 & operator=(String32 &&) = default;
+    String32 & operator=(String32 const& other) = default;
+    String32 & operator=(String32 && other) = default;
 
     using std::u32string::operator=;
 
     int size() const noexcept;
+    int tab_adjusted_size() const noexcept;
+
+    int adjust_for_tabs(int pos) const noexcept;
+    int from_tab_adjusted(int pos) const noexcept;
 
     int index_of(char32_t ch, int start = 0) const noexcept;
-
     int index_of_newline(int start = 0) const noexcept;
 
     bool contains(char32_t ch) const noexcept;
-    bool contains(String32 const& other) const noexcept;
+    bool contains(StringView32 other) const noexcept;
 
     String32 middle(int idx) const;
     String32 middle(int idx, int count) const;

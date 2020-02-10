@@ -11,81 +11,46 @@ public:
     Vector(Vector<Type> const&) = default;
     Vector(Vector<Type> &&) = default;
 
-    explicit Vector(std::size_t size) : std::vector<Type>(size)
-    {
-    }
-
-    Vector(std::vector<Type> const& other) : std::vector<Type>(other)
-    {
-    }
-
-    Vector(std::vector<Type> && other) : std::vector<Type>(std::forward<std::vector<Type>>(other))
-    {
-    }
-
-    Vector(std::initializer_list<Type> list) : std::vector<Type>(list)
-    {
-    }
-
-    template <typename T>
-    Vector(T begin, T end) : std::vector<Type>(begin, end)
-    {
-    }
-
+    using std::vector<Type>::vector;
+    
     Vector<Type> & operator=(Vector const&) = default;
     Vector<Type> & operator=(Vector &&) = default;
 
-    Vector<Type> & operator=(std::vector<Type> const& other)
-    {
-        std::vector<Type>::operator=(other);
-        return *this;
-    }
-
-    Vector<Type> & operator=(std::vector<Type> && other)
-    {
-        std::vector<Type>::operator=(std::forward<std::vector<Type>>(other));
-        return *this;
-    }
-
-    Vector<Type> & operator=(std::initializer_list<Type> list)
-    {
-        std::vector<Type>::operator=(list);
-        return *this;
-    }
-
-    Vector<Type> & operator+=(Vector<Type> const& other)
-    {
-        for (Type const& item : other)
-        {
-            Vector<Type>::push_back(item);
-        }
-        return *this;
-    }
-
-    Vector<Type> & operator+=(Vector<Type> && other)
-    {
-        for (Type & item : other)
-        {
-            Vector<Type>::push_back(std::move(item));
-        }
-        return *this;
-    }
+    using std::vector<Type>::operator=;
 
     Vector<Type> & operator+=(std::vector<Type> const& other)
     {
+        reserve(size() + other.size());
+
         for (Type const& item : other)
         {
             Vector<Type>::push_back(item);
         }
+
         return *this;
     }
 
     Vector<Type> & operator+=(std::vector<Type> && other)
     {
+        reserve(size() + other.size());
+
         for (Type & item : other)
         {
             Vector<Type>::push_back(std::move(item));
         }
+
+        return *this;
+    }
+
+    Vector<Type> & operator+=(std::initializer_list<Type> other)
+    {
+        reserve(size() + other.size());
+
+        for (Type const& item : other)
+        {
+            Vector<Type>::push_back(item);
+        }
+
         return *this;
     }
 

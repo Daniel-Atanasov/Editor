@@ -8,6 +8,66 @@
 
 namespace Jass
 {
+    namespace
+    {
+        static HashMap<StringView32, TokenType> keywords
+        {
+            {U"globals", TokenType::Globals},
+            {U"endglobals", TokenType::EndGlobals},
+            {U"type", TokenType::Type},
+            {U"extends", TokenType::Extends},
+            {U"native", TokenType::Native},
+            {U"takes", TokenType::Takes},
+            {U"returns", TokenType::Returns},
+            {U"function", TokenType::Function},
+            {U"endfunction", TokenType::EndFunction},
+            {U"method", TokenType::Method},
+            {U"endmethod", TokenType::EndMethod},
+            {U"operator", TokenType::Operator},
+            {U"struct", TokenType::Struct},
+            {U"endstruct", TokenType::EndStruct},
+            {U"interface", TokenType::Interface},
+            {U"endinterface", TokenType::EndInterface},
+            {U"module", TokenType::Module},
+            {U"endmodule", TokenType::EndModule},
+            {U"implement", TokenType::Implement},
+            {U"scope", TokenType::Scope},
+            {U"endscope", TokenType::EndScope},
+            {U"initializer", TokenType::Initializer},
+            {U"library", TokenType::Library},
+            {U"endlibrary", TokenType::EndLibrary},
+            {U"requires", TokenType::Requires},
+            {U"uses", TokenType::Uses},
+            {U"needs", TokenType::Needs},
+            {U"loop", TokenType::Loop},
+            {U"exitwhen", TokenType::ExitWhen},
+            {U"endloop", TokenType::EndLoop},
+            {U"if", TokenType::If},
+            {U"then", TokenType::Then},
+            {U"elseif", TokenType::ElseIf},
+            {U"else", TokenType::Else},
+            {U"endif", TokenType::EndIf},
+            {U"and", TokenType::And},
+            {U"or", TokenType::Or},
+            {U"not", TokenType::Not},
+            {U"private", TokenType::Private},
+            {U"public", TokenType::Public},
+            {U"static", TokenType::Static},
+            {U"constant", TokenType::Constant},
+            {U"local", TokenType::Local},
+            {U"set", TokenType::Set},
+            {U"call", TokenType::Call},
+            {U"return", TokenType::Return},
+
+            {U"nothing", TokenType::Nothing},
+            {U"array", TokenType::Array},
+
+            {U"null", TokenType::Null},
+            {U"true", TokenType::True},
+            {U"false", TokenType::False}
+        };
+    }
+
     Token::Token(TokenType type, int start, int stop, String32 value, Vector<Token> tokens) :
         type(type),
         start(start),
@@ -85,20 +145,13 @@ namespace Jass
         int stop = start;
 
         Vector<Token> tokens; // TODO@Daniel: Find a good way to implement doc params
-        for (;;)
+        for (; stop != text.size(); stop++)
         {
-            if (stop > text.size())
-            {
-                stop = text.size();
-                break;
-            }
-            if (text[stop] == '*' && text[stop + 1] == '/')
+            if (text.middle_view(stop, 2) == U"*/")
             {
                 stop += 2;
                 break;
             }
-
-            stop++;
         }
 
         return Token(TokenType::CommentBlock, start - add_offset * 2, stop, std::move(tokens));
@@ -106,56 +159,40 @@ namespace Jass
 
     Token ReadStringLiteral(StringView32 text, int start, bool add_offset)
     {
-        static String32 slash_escapes = U"\\nt\"";
-        static String32 pipe_escapes = U"cnr";
+        StringView32 slash_escapes = U"\\nt\"";
+        StringView32 pipe_escapes = U"cnr";
 
         int stop = start;
 
         Vector<Token> tokens;
-        for (;;)
+        for (; stop < text.size(); stop++)
         {
-            if (stop + 2 > text.size())
+            StringView32 token = text.middle_view(stop, 2);
+
+            switch (token[0])
             {
-                stop = text.size();
+            case U'"':
+                stop++;
+                goto ret;
+            case U'\\':
+            case U'|':
+                if (token.size() == 2)
+                {
+                    bool b;
+                    if (token[0] == U'\\') b = slash_escapes.contains(token[1]);
+                    else                  b = pipe_escapes.contains(token[1]);
+
+                    TokenType type;
+                    if (b) type = TokenType::ValidEscapeSequence;
+                    else   type = TokenType::InvalidEscapeSequence;
+
+                    tokens.emplace_back(type, stop, stop + 2);
+                    stop ++;
+                }
                 break;
             }
-            if (text[stop] == U'"' || text[stop] == U'\0')
-            {
-                stop++;
-                break;
-            }
-            if (text[stop] == U'\\')
-            {
-                char32_t next = text[stop + 1];
-                if (next == U'\0')
-                {
-                    stop += 2;
-                    break;
-                }
-
-                TokenType type;
-                if (slash_escapes.contains(next))
-                {
-                    type = TokenType::ValidEscapeSequence;
-                }
-                else
-                {
-                    type = TokenType::InvalidEscapeSequence;
-                }
-
-                tokens.emplace_back(type, stop, stop + 2);
-                stop++;
-            }
-            if (text[stop] == U'|')
-            {
-                if (pipe_escapes.contains(text[stop + 1]))
-                {
-                    tokens.emplace_back(TokenType::ValidEscapeSequence, stop, stop + 2);
-                    stop++;
-                }
-            }
-            stop++;
         }
+        ret:
 
         return Token(TokenType::String, start - add_offset, stop, std::move(tokens));
     }
@@ -195,77 +232,25 @@ namespace Jass
 
         TokenType type = TokenType::Identifier;
 
-        String32 value = text.middle(start, stop - start);
+        StringView32 value = text.middle_view(start, stop - start);
 
         if (!ignore_keywords)
         {
-            static HashMap<StringView32, TokenType> keywords
-            {
-                {U"globals", TokenType::Globals},
-                {U"endglobals", TokenType::EndGlobals},
-                {U"type", TokenType::Type},
-                {U"extends", TokenType::Extends},
-                {U"native", TokenType::Native},
-                {U"takes", TokenType::Takes},
-                {U"returns", TokenType::Returns},
-                {U"function", TokenType::Function},
-                {U"endfunction", TokenType::EndFunction},
-                {U"method", TokenType::Method},
-                {U"endmethod", TokenType::EndMethod},
-                {U"operator", TokenType::Operator},
-                {U"struct", TokenType::Struct},
-                {U"endstruct", TokenType::EndStruct},
-                {U"interface", TokenType::Interface},
-                {U"endinterface", TokenType::EndInterface},
-                {U"module", TokenType::Module},
-                {U"endmodule", TokenType::EndModule},
-                {U"implement", TokenType::Implement},
-                {U"scope", TokenType::Scope},
-                {U"endscope", TokenType::EndScope},
-                {U"initializer", TokenType::Initializer},
-                {U"library", TokenType::Library},
-                {U"endlibrary", TokenType::EndLibrary},
-                {U"requires", TokenType::Requires},
-                {U"uses", TokenType::Uses},
-                {U"needs", TokenType::Needs},
-                {U"loop", TokenType::Loop},
-                {U"exitwhen", TokenType::ExitWhen},
-                {U"endloop", TokenType::EndLoop},
-                {U"if", TokenType::If},
-                {U"then", TokenType::Then},
-                {U"elseif", TokenType::ElseIf},
-                {U"else", TokenType::Else},
-                {U"endif", TokenType::EndIf},
-                {U"and", TokenType::And},
-                {U"or", TokenType::Or},
-                {U"not", TokenType::Not},
-                {U"private", TokenType::Private},
-                {U"public", TokenType::Public},
-                {U"static", TokenType::Static},
-                {U"constant", TokenType::Constant},
-                {U"local", TokenType::Local},
-                {U"set", TokenType::Set},
-                {U"call", TokenType::Call},
-                {U"return", TokenType::Return},
-
-                {U"nothing", TokenType::Nothing},
-                {U"array", TokenType::Array},
-
-                {U"null", TokenType::Null},
-                {U"true", TokenType::True},
-                {U"false", TokenType::False}
-            };
-
             auto it = keywords.find(value);
             if (it != std::end(keywords)) type = it->second;
         }
 
-        return Token(type, start, stop, std::move(value));
+        if (type == TokenType::Identifier)
+        {
+            return Token(type, start, stop, value);
+        }
+
+        return Token(type, start, stop);
     }
 
     Token NextToken(StringView32 text, int start)
     {
-        auto at = [&text](int idx) -> char32_t
+        auto at = [&text](int idx)
         {
             if (idx < 0 || idx >= text.size()) return U'\0';
             return text[idx];
@@ -433,6 +418,7 @@ namespace Jass
     Vector<Token> Tokenize(StringView32 text, int start)
     {
         Vector<Token> tokens;
+        tokens.reserve((text.size() - start) / 40);
         while (start < text.size())
         {
             tokens.push_back(NextToken(text, start));
@@ -458,6 +444,8 @@ namespace Jass
 
         Vector<Token> tokens = Tokenize(text);
 
+        keywords.reserve(tokens.size() / 20);
+
         int prev_idx = 0;
         do
         {
@@ -467,7 +455,7 @@ namespace Jass
             int second_idx = NextMeaningfullToken(tokens, first_idx + 1);
             if (second_idx == -1) break;
 
-            Token & first = tokens[first_idx];
+            Token & first  = tokens[first_idx];
             Token & second = tokens[second_idx];
 
             prev_idx = second_idx;
@@ -485,7 +473,7 @@ namespace Jass
                     style = JASS_NATIVE;
                     break;
                 case TokenType::Type:
-                case TokenType::String:
+                case TokenType::Struct:
                     style = JASS_TYPE;
                     break;
                 default:

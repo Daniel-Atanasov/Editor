@@ -3,6 +3,7 @@
 #include <QDebug>
 
 #include <QApplication>
+#include <QPixmap>
 
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -12,20 +13,53 @@
 #include "Painter.hpp"
 #include "Clipboard.hpp"
 
-QSize BufferWidget::VisibleCellArea()
+int BufferWidget::CellWidth()
 {
-    QSize const& cell_size = buffer.CellSize();
+    return dummyWidget->size().width() / buffer.CellSize().width();
+}
 
-    return QSize(size().width() / cell_size.width(), size().height() / cell_size.height());
+int BufferWidget::CellHeight()
+{
+    return dummyWidget->size().height() / buffer.CellSize().height();
+}
+
+QSize BufferWidget::CellArea()
+{
+    return QSize(CellWidth(), CellHeight());
+}
+
+int BufferWidget::FirstVisibleLine()
+{
+    return scrollBarVertical->value();
 }
 
 int BufferWidget::LastVisibleLine()
 {
-    return std::min(scrollBarVertical->value() + VisibleCellArea().height(), buffer.LineCount() - 1);
+    return std::min(FirstVisibleLine() + CellHeight(), buffer.LineCount() - 1);
+}
+
+Position BufferWidget::FirstVisiblePosition()
+{
+    Position pos;
+    pos.y = FirstVisibleLine();
+    pos.x = 0;
+    return pos;
+}
+
+Position BufferWidget::LastVisiblePosition()
+{
+    Position pos;
+    pos.y = LastVisibleLine();
+    pos.x = std::min(CellWidth(), buffer.LineLength(pos.y));
+    return pos;
 }
 
 void BufferWidget::EnsureCursorIsVisible()
 {
+    if (buffer.CursorCount() == 1)
+    {
+
+    }
 }
 
 void BufferWidget::EnsureVisibleAreaIsStyled()
@@ -33,49 +67,79 @@ void BufferWidget::EnsureVisibleAreaIsStyled()
     buffer.EnsureStyled(LastVisibleLine());
 }
 
+int BufferWidget::VScroll()
+{
+    return scrollBarVertical->value();
+}
+
+void BufferWidget::SetVScroll(int value)
+{
+    scrollBarVertical->setValue(value);
+}
+
 void BufferWidget::ScrollUp(int amount)
 {
-    scrollBarVertical->setValue(scrollBarVertical->value() - amount);
+    SetVScroll(VScroll() - amount);
 }
 
 void BufferWidget::ScrollDown(int amount)
 {
-    scrollBarVertical->setValue(scrollBarVertical->value() + amount);
+    SetVScroll(VScroll() + amount);
     EnsureVisibleAreaIsStyled();
 }
 
 Position BufferWidget::ScreenToCell(QPoint pt, bool round)
 {
-    QSize const& cell_size = buffer.CellSize();
+    QSize cs = buffer.CellSize();
 
-    int margin_width = buffer.LineNumberMarginWidth();
+    int mw = buffer.LineNumberMarginWidth();
+
+    int py = pt.y();
+    int px = pt.x() - mw;
+
+    int sy = VScroll() + py / cs.height();
+    int sx = px / cs.width();
 
     Position pos;
-    pos.x = (pt.x() - margin_width + round * cell_size.width() / 2) / cell_size.width();
-    pos.y = pt.y() / cell_size.height() + scrollBarVertical->value();
-    return pos;
+    pos.y = std::min(sy, buffer.LineCount() - 1);
+
+    StringView32 line = buffer.LineAt(pos.y);
+    pos.x = line.from_tab_adjusted(sx);
+
+    if (round && pos.x < line.size())
+    {
+        int start = line.adjust_for_tabs(pos.x);
+        char32_t ch = line[pos.x];
+
+        int w = 1;
+        if (ch == U'\t') w = TabWidth(start);
+
+        int rem = px - start * cs.width();
+        if (2 * rem > w * cs.width()) pos.x++;
+    }
+
+    return buffer.ClampPosition(pos);
 }
 
 void BufferWidget::UpdateScrollbar()
 {
-    QSize visible_area = VisibleCellArea();
+    int sy = buffer.LineCount();
+    int sx = buffer.MaximumTabAdjustedLineLength();
 
-    int lines = buffer.LineCount();
-    int max_size = buffer.MaximumLineLength();
+    int cw = CellWidth();
+    int ch = CellHeight();
 
     scrollBarVertical->setMinimum(0);
-    scrollBarVertical->setMaximum(lines - 1);
+    scrollBarVertical->setMaximum(sy - 1);
 
     scrollBarHorizontal->setMinimum(0);
-    scrollBarHorizontal->setMaximum(max_size - 2);
+    scrollBarHorizontal->setMaximum(sx - 1);
 
-    QSize size = VisibleCellArea();
+    bool hshow = sx <= cw;
+    bool vshow = sy <= ch;
 
-    bool vshow = lines <= size.height();
-    bool hshow = max_size <= size.width();
-
-    scrollBarVertical->setHidden(false);
-    scrollBarHorizontal->setHidden(false);
+    scrollBarHorizontal->setHidden(hshow);
+    scrollBarVertical->setHidden(vshow);
 }
 
 BufferWidget::BufferWidget(QWidget * parent) : QWidget(parent), timer(this)
@@ -134,6 +198,9 @@ BufferWidget::BufferWidget(QWidget * parent) : QWidget(parent), timer(this)
     keymap[Alt & Qt::Key_Up]   = [this] { buffer.CursorCloneUp();   };
     keymap[Alt & Qt::Key_Down] = [this] { buffer.CursorCloneDown(); };
 
+    keymap[Control & Qt::Key_Up]   = [this] { ScrollUp();   };
+    keymap[Control & Qt::Key_Down] = [this] { ScrollDown(); };
+
     keymap[Qt::Key_Home] = [this] { buffer.CursorMoveToLineStart(); };
     keymap[Qt::Key_End]  = [this] { buffer.CursorMoveToLineEnd();   };
 
@@ -151,6 +218,9 @@ BufferWidget::BufferWidget(QWidget * parent) : QWidget(parent), timer(this)
     keymap[Qt::Key_Return] = [this] { return buffer.CursorInsertText(U"\n"); };
     keymap[Qt::Key_Enter]  = [this] { return buffer.CursorInsertText(U"\n"); };
 
+    keymap[Control & Qt::Key_Return] = [this] { return buffer.CursorInsertText(U"\n"); };
+    keymap[Control & Qt::Key_Enter]  = [this] { return buffer.CursorInsertText(U"\n"); };
+
     keymap[Qt::Key_Tab] = [this] { return buffer.CursorInsertText(U"\t"); };
 
     keymap[Qt::Key_Backspace] = [this] { return buffer.CursorDeletePrev(); };
@@ -159,7 +229,11 @@ BufferWidget::BufferWidget(QWidget * parent) : QWidget(parent), timer(this)
     keymap[Control & Qt::Key_Backspace] = [this] { return buffer.CursorDeleteToPrevBorder(); };
     keymap[Control & Qt::Key_Delete]    = [this] { return buffer.CursorDeleteToNextBorder(); };
 
+    keymap[Control & Qt::Key_C] = [this] { buffer.DoCopy();         };
     keymap[Control & Qt::Key_V] = [this] { return buffer.DoPaste(); };
+    keymap[Control & Qt::Key_X] = [this] { return buffer.DoCut();   };
+
+    keymap[Control & Alt & Qt::Key_L] = [this] { return buffer.ConvertTabsToSpaces(); };
 
     UpdateScrollbar();
 
@@ -176,17 +250,35 @@ void BufferWidget::mousePressEvent(QMouseEvent * event)
     {
         Qt::KeyboardModifiers modifiers = event->modifiers();
 
-        if (!(modifiers & Qt::ControlModifier)) buffer.ClearCursors();
+        bool control = modifiers & Qt::ControlModifier;
+        bool shift = modifiers & Qt::ShiftModifier;
 
-        if (pos.x < 0)
+        if (shift)
         {
-            buffer.AddLineSelection(pos.y);
+            Cursor fc = buffer.FirstCursor();
+            Cursor lc = buffer.LastCursor();
+
+            buffer.ClearCursors();
+
+            Cursor cursor;
+            cursor.start = std::min({ pos, fc.start, fc.stop });
+            cursor.stop  = std::max({ pos, lc.start, lc.stop });
+            buffer.AddCursor(cursor);
         }
         else
         {
-            Cursor cursor;
-            cursor.start = cursor.stop = pos;
-            buffer.AddCursor(cursor);
+            if (!control) buffer.ClearCursors();
+
+            if (pos.x < 0)
+            {
+                buffer.AddLineSelection(pos.y);
+            }
+            else
+            {
+                Cursor cursor;
+                cursor.start = cursor.stop = pos;
+                buffer.AddCursor(cursor);
+            }
         }
     }
 
@@ -240,6 +332,7 @@ void BufferWidget::wheelEvent(QWheelEvent * event)
         if (delta > 0) ScrollUp(2);
         if (delta < 0) ScrollDown(2);
     }
+
     update();
 }
 
@@ -277,7 +370,6 @@ void BufferWidget::keyPressEvent(QKeyEvent * event)
 
     buffer.ConsolidateCursors();
 
-    if (buffer.LineCount() != line_count)
     {
         UpdateScrollbar();
     }
@@ -288,6 +380,7 @@ void BufferWidget::keyPressEvent(QKeyEvent * event)
 void BufferWidget::paintEvent(QPaintEvent * event)
 {
     Painter painter(this);
+
     buffer.Paint(painter, scrollBarVertical->value());
 
     if (!hasFocus())

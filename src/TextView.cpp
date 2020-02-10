@@ -42,7 +42,7 @@ TextView::TextView(Vector<String32> const& other) : lines(other.size())
 
 TextView & TextView::operator=(char32_t const* text)
 {
-    return *this = StringView32(text);
+    return *this = TextView(text);
 }
 
 TextView & TextView::operator=(StringView32 text)
@@ -52,7 +52,7 @@ TextView & TextView::operator=(StringView32 text)
 
 TextView & TextView::operator=(String32 const& text)
 {
-    return *this = StringView32(text);
+    return *this = TextView(text);
 }
 
 TextView & TextView::operator=(Vector<StringView32> other)

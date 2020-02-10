@@ -1,7 +1,7 @@
 #ifndef PAINTER_HPP
 #define PAINTER_HPP
 
-#include <QWidget>
+#include <QPaintDevice>
 
 #include <QPainter>
 #include <QFont>
@@ -15,10 +15,12 @@ class Painter
 private:
     QPainter painter;
 
+    QTextOption text_option;
+
     QRect clip_rect;
 
 public:
-    Painter(QWidget * widget);
+    Painter(QPaintDevice * widget);
 
     QRect Rect();
     QRect ClipRect();
@@ -36,6 +38,7 @@ public:
     void DrawLine(QPoint const& start, QPoint const& stop);
     void DrawCharacter(QRect rect, char32_t ch);
     void DrawText(QRect rect, StringView32 text, int flags = Qt::AlignHCenter | Qt::AlignVCenter);
+    void DrawText(int x, int y, int w, int h, StringView32 text);
 };
 
 #endif // PAINTER_HPP
